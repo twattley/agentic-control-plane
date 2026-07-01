@@ -1,8 +1,12 @@
-import { API_BASE } from './config'
+import { API_BASE, API_TOKEN } from './config'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(API_BASE + path, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${API_TOKEN}`,
+      ...options?.headers,
+    },
     ...options,
   })
   if (!res.ok) {
