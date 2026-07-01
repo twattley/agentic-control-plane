@@ -82,7 +82,8 @@ async def append_event(conn: asyncpg.Connection, run_id: int, data: EventIn) -> 
 
 async def list_events(conn: asyncpg.Connection, run_id: int) -> list[Event]:
     rows = await conn.fetch(
-        "SELECT id, run_id, type, actor, payload, created_at FROM events WHERE run_id = $1 ORDER BY id",
+        "SELECT id, run_id, type, actor, payload, created_at"
+        " FROM events WHERE run_id = $1 ORDER BY id",
         run_id,
     )
     out = []
@@ -128,14 +129,16 @@ async def acquire_lease(conn: asyncpg.Connection, run_id: int, role: str, holder
 async def release_lease(conn: asyncpg.Connection, run_id: int, role: str) -> None:
     """Release the active lease for a role, if one is held (idempotent)."""
     await conn.execute(
-        "UPDATE leases SET released_at = now() WHERE run_id = $1 AND role = $2 AND released_at IS NULL",
+        "UPDATE leases SET released_at = now()"
+        " WHERE run_id = $1 AND role = $2 AND released_at IS NULL",
         run_id, role,
     )
 
 
 async def list_leases(conn: asyncpg.Connection, run_id: int) -> list[Lease]:
     rows = await conn.fetch(
-        "SELECT id, run_id, role, holder, acquired_at, released_at FROM leases WHERE run_id = $1 ORDER BY id",
+        "SELECT id, run_id, role, holder, acquired_at, released_at"
+        " FROM leases WHERE run_id = $1 ORDER BY id",
         run_id,
     )
     return [Lease(**dict(r)) for r in rows]

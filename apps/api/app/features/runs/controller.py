@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 
 from fastapi import APIRouter, Depends, status
 
@@ -20,7 +20,7 @@ from app.services import runs_service
 router = APIRouter(prefix="/api/v1", tags=["runs"], dependencies=[Depends(require_token)])
 
 
-class QueueName(str, Enum):
+class QueueName(StrEnum):
     review = "review"
     fix = "fix"
     human = "human"
@@ -59,6 +59,13 @@ async def post_artifact(run_id: int, data: ArtifactIn) -> Artifact:
 @router.post("/runs/{run_id}/decision")
 async def post_decision(run_id: int, data: DecisionIn) -> Run:
     return await runs_service.decide(await get_pool(), run_id, data)
+
+
+@router.post("/runs/{run_id}/dispatch", status_code=status.HTTP_202_ACCEPTED)
+async def dispatch_run(run_id: int) -> dict:
+    """Manual re-run: (re)dispatch the agent the current state is waiting on."""
+    role = await runs_service.dispatch_current(await get_pool(), run_id)
+    return {"dispatched": role}
 
 
 @router.get("/queue/{name}")

@@ -1,8 +1,11 @@
 import type { Artifact, Event, RunDetail as RunDetailData } from '@agentic-control-plane/domain-types'
 import { Link, useParams } from 'react-router-dom'
-import { useDecide, usePostEvent, useRun } from '../../api/hooks'
+import { useDecide, useDispatch, usePostEvent, useRun } from '../../api/hooks'
 import { DiffView } from './DiffView'
 import { StateBadge } from './StateBadge'
+
+// States that are waiting on an agent — where a manual re-run makes sense.
+const DISPATCHABLE = ['queued', 'awaiting_review', 'needs_work']
 
 function payloadText(e: Event): string {
   const p = e.payload as Record<string, unknown>
@@ -15,6 +18,19 @@ function latest(events: Event[], type: string): Event | undefined {
 
 function latestDiff(artifacts: Artifact[]): Artifact | undefined {
   return [...artifacts].reverse().find((a) => a.kind === 'diff')
+}
+
+function ReRunButton({ id }: { id: number }) {
+  const dispatch = useDispatch(id)
+  return (
+    <button
+      onClick={() => dispatch.mutate()}
+      disabled={dispatch.isPending}
+      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 active:bg-slate-100 disabled:opacity-40"
+    >
+      {dispatch.isPending ? 'dispatching…' : '↻ Re-run stage'}
+    </button>
+  )
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
@@ -104,7 +120,10 @@ export function RunDetailPage() {
             <h1 className="text-xl font-bold text-slate-900">{run.title}</h1>
             <StateBadge state={run.state} />
           </div>
-          <p className="text-sm text-slate-500">{run.ticket_id}</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-slate-500">{run.ticket_id}</p>
+            {DISPATCHABLE.includes(run.state) && <ReRunButton id={run.id} />}
+          </div>
         </header>
 
         {findings && (

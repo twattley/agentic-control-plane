@@ -13,7 +13,26 @@ class Settings(BaseSettings):
     # reachable beyond localhost (Tailscale, LAN).
     auth_token: str = "dev-token"
 
+    # Auto-dispatch the next agent on each state transition. Off by default so
+    # tests and read-only use never spawn processes; on for the live service.
+    dispatch_enabled: bool = False
+    # Which provider runs each role. Flip to real CLIs on a real checkout;
+    # "stub" runs a fake agent (a tiny repo edit) to prove the chain safely.
+    builder_provider: str = "stub"
+    reviewer_provider: str = "stub"
+    # Where a finished worker kicks the API to dispatch the next agent.
+    api_url: str = "http://127.0.0.1:8400"
+
     model_config = {"env_prefix": "AGENTIC_CONTROL_PLANE_", "env_file": str(_ENV_FILE)}
+
+
+# Which role owns each "waiting" state — i.e. who gets dispatched when a run
+# lands here. Active states (building/reviewing/fixing) are already owned.
+ROLE_FOR_STATE = {
+    "queued": "builder",
+    "needs_work": "builder",
+    "awaiting_review": "reviewer",
+}
 
 
 settings = Settings()

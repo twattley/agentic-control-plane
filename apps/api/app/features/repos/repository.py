@@ -17,6 +17,13 @@ async def upsert_repo(pool: asyncpg.Pool, data: RepoIn) -> Repo:
     return Repo(**dict(row))
 
 
+async def get_repo(pool: asyncpg.Pool, repo_id: int) -> Repo | None:
+    row = await pool.fetchrow(
+        "SELECT id, slug, name, path, created_at FROM repos WHERE id = $1", repo_id
+    )
+    return Repo(**dict(row)) if row else None
+
+
 async def list_repos(pool: asyncpg.Pool) -> list[Repo]:
     rows = await pool.fetch(
         "SELECT id, slug, name, path, created_at FROM repos ORDER BY id"

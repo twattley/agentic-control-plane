@@ -7,8 +7,8 @@ from fastapi.responses import JSONResponse
 from app.database import close_pool, get_pool
 from app.features.repos.controller import router as repos_router
 from app.features.runs.controller import router as runs_router
-from app.services.runs_service import LeaseConflict, RunNotFound
-from app.services.state_machine import IllegalTransition
+from app.services.runs_service import LeaseConflictError, RunNotFoundError
+from app.services.state_machine import IllegalTransitionError
 
 
 @asynccontextmanager
@@ -33,18 +33,18 @@ app.include_router(repos_router)
 app.include_router(runs_router)
 
 
-@app.exception_handler(RunNotFound)
-async def _run_not_found(_: Request, exc: RunNotFound) -> JSONResponse:
+@app.exception_handler(RunNotFoundError)
+async def _run_not_found(_: Request, exc: RunNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
-@app.exception_handler(IllegalTransition)
-async def _illegal_transition(_: Request, exc: IllegalTransition) -> JSONResponse:
+@app.exception_handler(IllegalTransitionError)
+async def _illegal_transition(_: Request, exc: IllegalTransitionError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
-@app.exception_handler(LeaseConflict)
-async def _lease_conflict(_: Request, exc: LeaseConflict) -> JSONResponse:
+@app.exception_handler(LeaseConflictError)
+async def _lease_conflict(_: Request, exc: LeaseConflictError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 

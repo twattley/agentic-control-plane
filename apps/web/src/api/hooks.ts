@@ -45,3 +45,11 @@ export function usePostEvent(id: number) {
     onSuccess: () => invalidateRun(id),
   })
 }
+
+// Manual self-heal: re-dispatch the agent the current state is waiting on.
+export function useDispatch(id: number) {
+  return useMutation({
+    mutationFn: () => apiPost(`/runs/${id}/dispatch`, {}),
+    onSuccess: () => invalidateRun(id),
+  })
+}

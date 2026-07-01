@@ -2,7 +2,7 @@
 
 Pure logic, no I/O. The control plane's whole value is that run state can only
 move along legal edges — this module is the single authority on what those are.
-Callers apply a transition, catch `IllegalTransition`, and map it to HTTP 409.
+Callers apply a transition, catch `IllegalTransitionError`, and map it to HTTP 409.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ STATES = frozenset({
 _ACTIVE = STATES - {"approved", "closed", "blocked"}
 
 
-class IllegalTransition(Exception):
+class IllegalTransitionError(Exception):
     """Raised when a requested transition is not a legal edge."""
 
     def __init__(self, frm: str, trigger: str):
@@ -52,7 +52,7 @@ def claim_transition(state: str, role: str) -> str:
     """New state after `role` claims a run in `state`."""
     to = _CLAIM.get(role, {}).get(state)
     if to is None:
-        raise IllegalTransition(state, f"claim:{role}")
+        raise IllegalTransitionError(state, f"claim:{role}")
     return to
 
 
@@ -64,7 +64,7 @@ def event_transition(state: str, event_type: str, payload: dict | None = None) -
     """
     if event_type == "reviewer_findings_posted":
         if state != "reviewing":
-            raise IllegalTransition(state, event_type)
+            raise IllegalTransitionError(state, event_type)
         verdict = (payload or {}).get("verdict")
         return "awaiting_human" if verdict == "pass" else "needs_work"
 
@@ -73,7 +73,7 @@ def event_transition(state: str, event_type: str, payload: dict | None = None) -
         return None  # informational event (reply, note); allowed, no move
     to = edges.get(state)
     if to is None:
-        raise IllegalTransition(state, event_type)
+        raise IllegalTransitionError(state, event_type)
     return to
 
 
@@ -81,9 +81,9 @@ def decision_transition(state: str, decision: str) -> str:
     """New state after a human decision."""
     if decision == "block":
         if state not in _ACTIVE:
-            raise IllegalTransition(state, "block")
+            raise IllegalTransitionError(state, "block")
         return "blocked"
     to = _DECISION.get(decision, {}).get(state)
     if to is None:
-        raise IllegalTransition(state, f"decision:{decision}")
+        raise IllegalTransitionError(state, f"decision:{decision}")
     return to
