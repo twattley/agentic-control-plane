@@ -27,6 +27,8 @@ export function useAvailableProjects() {
   return useQuery({
     queryKey: ['available-projects'],
     queryFn: () => apiFetch<AvailableProject[]>('/repos/available'),
+    refetchInterval: 10_000, // self-heal if the API restarted after this tab loaded
+    retry: 3,
   })
 }
 

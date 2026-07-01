@@ -7,8 +7,8 @@ function RegisterForm({ registeredPaths }: { registeredPaths: Set<string> }) {
   const { data: available, isLoading } = useAvailableProjects()
   const [selected, setSelected] = useState('')
 
-  // Only offer folders not already registered.
-  const choices = (available ?? []).filter((p) => !registeredPaths.has(p.path))
+  // Only offer git repos that aren't already registered.
+  const choices = (available ?? []).filter((p) => p.is_git && !registeredPaths.has(p.path))
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,16 +23,14 @@ function RegisterForm({ registeredPaths }: { registeredPaths: Set<string> }) {
   return (
     <form onSubmit={submit} className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
       <h2 className="font-semibold text-slate-800">Add a project</h2>
-      <p className="text-xs text-slate-400">from your Projects folder</p>
+      <p className="text-xs text-slate-400">git repos in your Projects folder</p>
       <select className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm"
         value={selected} onChange={(e) => setSelected(e.target.value)}>
         <option value="">
-          {isLoading ? 'loading…' : choices.length ? 'select a folder…' : 'all folders registered'}
+          {isLoading ? 'loading…' : choices.length ? 'select a project…' : 'no git projects available'}
         </option>
         {choices.map((p) => (
-          <option key={p.path} value={p.path}>
-            {p.name}{!p.is_git && ' (not a git repo)'}
-          </option>
+          <option key={p.path} value={p.path}>{p.name}</option>
         ))}
       </select>
       <button disabled={register.isPending || !selected}
