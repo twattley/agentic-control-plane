@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "agentic-control-plane",
+    "slug": "agentic-control-plane",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "workspaces": ["apps/web", "apps/mobile", "packages/*"],
+  "scripts": {
+    "web": "npm --workspace @agentic-control-plane/web run dev", "mobile": "npm --workspace @agentic-control-plane/mobile run start"
+  }
+}

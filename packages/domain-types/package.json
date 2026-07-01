@@ -1,0 +1,8 @@
+{
+  "name": "@agentic-control-plane/domain-types",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
