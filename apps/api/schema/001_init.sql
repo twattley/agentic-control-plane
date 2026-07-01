@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS runs (
                 CHECK (state IN (
                     'queued', 'building', 'awaiting_review', 'reviewing',
                     'needs_work', 'fixing', 'awaiting_human', 'approved',
-                    'closed', 'blocked'
+                    'closing', 'closed', 'blocked'
                 )),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()

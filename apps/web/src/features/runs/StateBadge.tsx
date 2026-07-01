@@ -11,6 +11,7 @@ const STYLES: Record<RunState, string> = {
   fixing: 'bg-amber-100 text-amber-800',
   awaiting_human: 'bg-blue-100 text-blue-800',
   approved: 'bg-green-100 text-green-800',
+  closing: 'bg-indigo-100 text-indigo-800',
   closed: 'bg-slate-200 text-slate-600',
   blocked: 'bg-red-100 text-red-800',
 }

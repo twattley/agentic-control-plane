@@ -10,6 +10,7 @@ export type RunState =
   | 'fixing'
   | 'awaiting_human'
   | 'approved'
+  | 'closing'
   | 'closed'
   | 'blocked'
 

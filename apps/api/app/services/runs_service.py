@@ -129,7 +129,7 @@ _DECISION_EVENT = {
     "approve": "human_approved",
     "request_changes": "human_note_posted",
     "block": "blocked",
-    "close": "closed",
+    "close": "close_requested",  # closer worker then gates + commits -> closed
 }
 
 

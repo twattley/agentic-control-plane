@@ -69,10 +69,13 @@ async def test_full_happy_path_to_closed(client):
     q = (await client.get("/api/v1/queue/human", headers=AUTH)).json()
     assert [r["id"] for r in q] == [run_id]
 
-    # human approves -> approved -> closed
+    # human approves -> approved -> closing (closer worker gates+commits) -> closed
     await client.post(f"/api/v1/runs/{run_id}/decision", json={"decision": "approve"}, headers=AUTH)
     assert await _state(client, run_id) == "approved"
     await client.post(f"/api/v1/runs/{run_id}/decision", json={"decision": "close"}, headers=AUTH)
+    assert await _state(client, run_id) == "closing"
+    # the closer reports the gate passed
+    await client.post(f"/api/v1/runs/{run_id}/events", json={"type": "gate_passed", "actor": "system"}, headers=AUTH)
     assert await _state(client, run_id) == "closed"
 
 

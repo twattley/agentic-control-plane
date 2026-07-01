@@ -10,7 +10,7 @@ from __future__ import annotations
 STATES = frozenset({
     "queued", "building", "awaiting_review", "reviewing",
     "needs_work", "fixing", "awaiting_human", "approved",
-    "closed", "blocked",
+    "closing", "closed", "blocked",
 })
 
 # States a run can still be actively worked from (block is always legal here).
@@ -36,6 +36,9 @@ _CLAIM: dict[str, dict[str, str]] = {
 # Event types absent here are informational and never move state.
 _EVENT: dict[str, dict[str, str]] = {
     "builder_brief_posted": {"building": "awaiting_review", "fixing": "awaiting_review"},
+    # the closer worker reports the gate result:
+    "gate_passed": {"closing": "closed"},
+    "gate_failed": {"closing": "needs_work"},
     # reviewer verdict splits by payload; handled in event_transition below.
 }
 
@@ -43,7 +46,7 @@ _EVENT: dict[str, dict[str, str]] = {
 _DECISION: dict[str, dict[str, str]] = {
     "approve": {"awaiting_human": "approved"},
     "request_changes": {"awaiting_human": "needs_work"},
-    "close": {"approved": "closed"},
+    "close": {"approved": "closing"},  # closer then runs the gate + commit
     # block is special-cased: legal from any active state.
 }
 

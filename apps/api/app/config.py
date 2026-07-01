@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Max "changes" verdicts before the reviewer escalates to the human instead
     # of bouncing the run back to the builder — bounds build<->review spend.
     max_review_rounds: int = 2
+    # Shell command the closer runs as the gate before committing (must exit 0).
+    # Default is a no-op; set to the repo's test command to gate on green tests.
+    close_gate_command: str = "true"
 
     model_config = {"env_prefix": "AGENTIC_CONTROL_PLANE_", "env_file": str(_ENV_FILE)}
 
@@ -35,6 +38,7 @@ ROLE_FOR_STATE = {
     "queued": "builder",
     "needs_work": "builder",
     "awaiting_review": "reviewer",
+    "closing": "closer",
 }
 
 

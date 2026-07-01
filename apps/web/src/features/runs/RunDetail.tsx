@@ -59,12 +59,22 @@ function ActionBar({ data }: { data: RunDetailData }) {
   }
 
   const canApprove = state === 'awaiting_human'
-  const canBlock = !['approved', 'closed', 'blocked'].includes(state)
+  const canBlock = !['approved', 'closing', 'closed', 'blocked'].includes(state)
+  const canClose = state === 'approved'
 
   return (
     <div className="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
       {(decide.error || note.error) && (
         <p className="mb-2 text-sm text-red-600">{String(decide.error ?? note.error)}</p>
+      )}
+      {canClose && (
+        <button
+          onClick={() => decide.mutate({ decision: 'close' })}
+          disabled={busy}
+          className="mb-2 w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white disabled:opacity-40"
+        >
+          Submit — gate &amp; commit
+        </button>
       )}
       <div className="grid grid-cols-2 gap-2">
         <button

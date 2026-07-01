@@ -61,6 +61,9 @@ def _git_diff(repo_path: str) -> str:
 async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) -> str:
     """Run one agent pass. Returns 'skipped' | 'done'. Safe to call twice —
     the loser of the claim race returns 'skipped'."""
+    if role == "closer":
+        return await _close_pass(pool, run_id)
+
     try:
         await runs_service.claim(pool, run_id, ClaimIn(role=role, holder=provider))
     except (IllegalTransitionError, LeaseConflictError, runs_service.RunNotFoundError):
@@ -102,6 +105,52 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
             EventIn(type="reviewer_findings_posted", actor="reviewer",
                     payload={"verdict": verdict, "summary": summary, "provider": provider}),
         )
+    return "done"
+
+
+async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
+    """Run the close gate, then commit the run's changes in the repo checkout.
+
+    Gate green -> `gate_passed` (state closing -> closed). Gate red -> `gate_failed`
+    (back to needs_work for a fix). Commits locally; never pushes (that stays a
+    deliberate human/CI action). Safe to run twice: a second closer finds the run
+    already past `closing` and the transition raises -> skipped.
+    """
+    detail = await runs_service.run_detail(pool, run_id)
+    if detail.run.state != "closing":
+        return "skipped"
+    repo = await repos_repo.get_repo(pool, detail.run.repo_id)
+    if repo is None:
+        return "skipped"
+
+    gate = subprocess.run(
+        ["bash", "-lc", settings.close_gate_command],
+        cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
+    )
+    if gate.returncode != 0:
+        return await _post_gate(
+            pool, run_id, "gate_failed",
+            (gate.stdout + gate.stderr).strip()[:500] or "gate command failed",
+        )
+
+    subprocess.run(["git", "-C", repo.path, "add", "-A"], check=False)
+    commit = subprocess.run(
+        ["git", "-C", repo.path,
+         "-c", "user.email=agent@control-plane", "-c", "user.name=agentic-control-plane",
+         "commit", "-m", f"{detail.run.ticket_id}: {detail.run.title}"],
+        capture_output=True, text=True, check=False,
+    )
+    note = commit.stdout.strip()[:300] or commit.stderr.strip()[:300] or "committed"
+    return await _post_gate(pool, run_id, "gate_passed", note)
+
+
+async def _post_gate(pool: asyncpg.Pool, run_id: int, event_type: str, summary: str) -> str:
+    try:
+        await runs_service.record_event(
+            pool, run_id, EventIn(type=event_type, actor="system", payload={"summary": summary})
+        )
+    except IllegalTransitionError:
+        return "skipped"  # another closer already moved it
     return "done"
 
 
