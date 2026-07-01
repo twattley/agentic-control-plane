@@ -50,9 +50,9 @@ async def create_run(pool: asyncpg.Pool, data: RunIn) -> Run:
     return run
 
 
-async def list_runs(pool: asyncpg.Pool) -> list[Run]:
+async def list_runs(pool: asyncpg.Pool, repo_id: int | None = None) -> list[Run]:
     async with pool.acquire() as conn:
-        return await repo.list_runs(conn)
+        return await repo.list_runs(conn, repo_id)
 
 
 async def run_detail(pool: asyncpg.Pool, run_id: int) -> RunDetail:

@@ -202,6 +202,9 @@ def _task_for(detail, role: str) -> str:
     if findings:
         return (f"Address the reviewer findings on {run.ticket_id}: {run.title}. "
                 f"Findings: {findings.payload.get('summary', '')}")
+    if run.mode == "tdd":
+        return (f"Implement {run.ticket_id}: {run.title}. Work test-first: write a "
+                "failing test that captures the behaviour, then implement until it passes.")
     return f"Implement {run.ticket_id}: {run.title}."
 
 

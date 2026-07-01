@@ -32,8 +32,8 @@ async def create_run(data: RunIn) -> Run:
 
 
 @router.get("/runs")
-async def list_runs() -> list[Run]:
-    return await runs_service.list_runs(await get_pool())
+async def list_runs(repo_id: int | None = None) -> list[Run]:
+    return await runs_service.list_runs(await get_pool(), repo_id)
 
 
 @router.get("/runs/{run_id}")

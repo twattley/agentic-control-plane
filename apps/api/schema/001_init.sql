@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS runs (
     repo_id     BIGINT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
     ticket_id   TEXT NOT NULL,              -- work unit id, e.g. ticket filename
     title       TEXT NOT NULL,
+    mode        TEXT NOT NULL DEFAULT 'direct',  -- 'direct' | 'tdd' (tests first)
     state       TEXT NOT NULL DEFAULT 'queued'
                 CHECK (state IN (
                     'queued', 'building', 'awaiting_review', 'reviewing',

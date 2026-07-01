@@ -2,14 +2,47 @@ import type {
   DecisionInput,
   EventInput,
   QueueName,
+  Repo,
+  RepoInput,
   Run,
   RunDetail,
+  RunInput,
 } from '@agentic-control-plane/domain-types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiFetch, apiPost } from './http'
 import { queryClient } from './queryClient'
 
 const QUEUES: QueueName[] = ['review', 'fix', 'human']
+
+export function useRepos() {
+  return useQuery({ queryKey: ['repos'], queryFn: () => apiFetch<Repo[]>('/repos') })
+}
+
+export function useRepo(id: number) {
+  return useQuery({ queryKey: ['repo', id], queryFn: () => apiFetch<Repo>(`/repos/${id}`) })
+}
+
+export function useRegisterRepo() {
+  return useMutation({
+    mutationFn: (body: RepoInput) => apiPost<Repo>('/repos', body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['repos'] }),
+  })
+}
+
+export function useRepoRuns(repoId: number) {
+  return useQuery({
+    queryKey: ['runs', { repoId }],
+    queryFn: () => apiFetch<Run[]>(`/runs?repo_id=${repoId}`),
+    refetchInterval: 5_000,
+  })
+}
+
+export function useCreateRun(repoId: number) {
+  return useMutation({
+    mutationFn: (body: RunInput) => apiPost<Run>('/runs', body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['runs', { repoId }] }),
+  })
+}
 
 export function useQueue(name: QueueName) {
   return useQuery({

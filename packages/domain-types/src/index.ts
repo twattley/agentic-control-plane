@@ -33,11 +33,14 @@ export interface RepoInput {
   path: string
 }
 
+export type RunMode = 'direct' | 'tdd'
+
 export interface Run {
   id: number
   repo_id: number
   ticket_id: string
   title: string
+  mode: RunMode
   state: RunState
   created_at: string
   updated_at: string
@@ -47,6 +50,7 @@ export interface RunInput {
   repo_id: number
   ticket_id: string
   title: string
+  mode: RunMode
 }
 
 export interface Event {

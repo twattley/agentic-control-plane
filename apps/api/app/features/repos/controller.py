@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import require_token
 from app.database import get_pool
@@ -16,3 +16,11 @@ async def register_repo(data: RepoIn) -> Repo:
 @router.get("")
 async def list_repos() -> list[Repo]:
     return await repository.list_repos(await get_pool())
+
+
+@router.get("/{repo_id}")
+async def get_repo(repo_id: int) -> Repo:
+    repo = await repository.get_repo(await get_pool(), repo_id)
+    if repo is None:
+        raise HTTPException(status_code=404, detail=f"repo {repo_id} not found")
+    return repo

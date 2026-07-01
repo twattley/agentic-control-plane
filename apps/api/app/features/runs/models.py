@@ -7,6 +7,7 @@ class RunIn(BaseModel):
     repo_id: int
     ticket_id: str
     title: str
+    mode: str = "direct"  # 'direct' | 'tdd'
 
 
 class Run(BaseModel):
@@ -14,6 +15,7 @@ class Run(BaseModel):
     repo_id: int
     ticket_id: str
     title: str
+    mode: str
     state: str
     created_at: datetime
     updated_at: datetime

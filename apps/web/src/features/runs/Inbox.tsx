@@ -45,8 +45,9 @@ export function Inbox() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4">
       <header className="pt-2">
-        <h1 className="text-2xl font-bold text-slate-900">Control plane</h1>
-        <p className="text-sm text-slate-500">builder / reviewer handoff inbox</p>
+        <Link to="/" className="text-sm text-slate-400">← projects</Link>
+        <h1 className="text-2xl font-bold text-slate-900">Inbox</h1>
+        <p className="text-sm text-slate-500">builder / reviewer handoff — needs attention</p>
       </header>
       {SECTIONS.map((s) => <QueueSection key={s.name} {...s} />)}
     </div>
