@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings
 # (tests and `make serve` both run from the repo root).
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
+_DEFAULT_PROJECTS_ROOT = str(Path.home() / "Projects")
+
 
 class Settings(BaseSettings):
     database_url: str
@@ -28,6 +30,9 @@ class Settings(BaseSettings):
     # Shell command the closer runs as the gate before committing (must exit 0).
     # Default is a no-op; set to the repo's test command to gate on green tests.
     close_gate_command: str = "true"
+    # Root folder whose subdirectories are the registerable projects. The
+    # register UI offers a dropdown of these — no free-text paths.
+    projects_root: str = _DEFAULT_PROJECTS_ROOT
 
     model_config = {"env_prefix": "AGENTIC_CONTROL_PLANE_", "env_file": str(_ENV_FILE)}
 

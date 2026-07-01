@@ -15,3 +15,11 @@ class Repo(BaseModel):
     name: str
     path: str
     created_at: datetime
+
+
+class AvailableProject(BaseModel):
+    """A directory under the projects root that could be registered."""
+
+    name: str
+    path: str
+    is_git: bool

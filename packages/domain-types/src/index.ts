@@ -33,6 +33,12 @@ export interface RepoInput {
   path: string
 }
 
+export interface AvailableProject {
+  name: string
+  path: string
+  is_git: boolean
+}
+
 export type RunMode = 'direct' | 'tdd'
 
 export interface Run {

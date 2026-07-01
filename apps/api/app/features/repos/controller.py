@@ -1,9 +1,12 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import require_token
+from app.config import settings
 from app.database import get_pool
 from app.features.repos import repository
-from app.features.repos.models import Repo, RepoIn
+from app.features.repos.models import AvailableProject, Repo, RepoIn
 
 router = APIRouter(prefix="/api/v1/repos", tags=["repos"], dependencies=[Depends(require_token)])
 
@@ -16,6 +19,19 @@ async def register_repo(data: RepoIn) -> Repo:
 @router.get("")
 async def list_repos() -> list[Repo]:
     return await repository.list_repos(await get_pool())
+
+
+@router.get("/available")
+async def available_projects() -> list[AvailableProject]:
+    """Directories under the configured projects root — the register dropdown."""
+    root = Path(settings.projects_root)
+    if not root.is_dir():
+        return []
+    return [
+        AvailableProject(name=p.name, path=str(p), is_git=(p / ".git").is_dir())
+        for p in sorted(root.iterdir())
+        if p.is_dir() and not p.name.startswith(".")
+    ]
 
 
 @router.get("/{repo_id}")

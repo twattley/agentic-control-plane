@@ -1,4 +1,5 @@
 import type {
+  AvailableProject,
   DecisionInput,
   EventInput,
   QueueName,
@@ -20,6 +21,13 @@ export function useRepos() {
 
 export function useRepo(id: number) {
   return useQuery({ queryKey: ['repo', id], queryFn: () => apiFetch<Repo>(`/repos/${id}`) })
+}
+
+export function useAvailableProjects() {
+  return useQuery({
+    queryKey: ['available-projects'],
+    queryFn: () => apiFetch<AvailableProject[]>('/repos/available'),
+  })
 }
 
 export function useRegisterRepo() {
