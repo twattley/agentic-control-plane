@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     reviewer_provider: str = "stub"
     # Where a finished worker kicks the API to dispatch the next agent.
     api_url: str = "http://127.0.0.1:8400"
+    # Max "changes" verdicts before the reviewer escalates to the human instead
+    # of bouncing the run back to the builder — bounds build<->review spend.
+    max_review_rounds: int = 2
 
     model_config = {"env_prefix": "AGENTIC_CONTROL_PLANE_", "env_file": str(_ENV_FILE)}
 

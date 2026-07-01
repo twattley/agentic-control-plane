@@ -14,6 +14,7 @@ checkout to go live.
 """
 
 import asyncio
+import json
 import os
 import signal
 import subprocess
@@ -75,7 +76,8 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         _agent_command(role, provider, task, repo.path),
         cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
     )
-    summary = (result.stdout or "").strip()[:500] or f"{provider} {role} pass complete"
+    summary = _agent_message(result.stdout or "", provider).strip()[:500] \
+        or f"{provider} {role} pass complete"
 
     if role == "builder":
         diff = _git_diff(repo.path)
@@ -87,7 +89,14 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
                     payload={"summary": summary, "provider": provider}),
         )
     else:
-        verdict = "pass"  # stub always passes; a real reviewer parses its output
+        verdict = _parse_verdict(result.stdout or "", provider)
+        prior_changes = sum(
+            1 for e in detail.events
+            if e.type == "reviewer_findings_posted" and e.payload.get("verdict") == "changes"
+        )
+        verdict = _capped_verdict(verdict, prior_changes, settings.max_review_rounds)
+        if verdict == "pass" and prior_changes >= settings.max_review_rounds:
+            summary = f"[escalated to human after {prior_changes} change rounds] {summary}"
         await runs_service.record_event(
             pool, run_id,
             EventIn(type="reviewer_findings_posted", actor="reviewer",
@@ -96,10 +105,49 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
     return "done"
 
 
+def _agent_message(stdout: str, provider: str) -> str:
+    """The human-readable final message. Claude's `-p --output-format json` wraps
+    it in a `result` field; other providers print plain text."""
+    if provider == "claude":
+        try:
+            return json.loads(stdout).get("result", stdout)
+        except (json.JSONDecodeError, AttributeError):
+            return stdout
+    return stdout
+
+
+def _parse_verdict(stdout: str, provider: str) -> str:
+    """Extract 'pass' | 'changes' from an agent's review output.
+
+    The reviewer is asked to end with a `VERDICT: pass|changes` line. Ambiguous
+    output defaults to 'pass' so we escalate to the human rather than loop the
+    builder forever. A stub reviewer emits nothing -> 'pass'.
+    """
+    low = _agent_message(stdout, provider).lower()
+    if "verdict: changes" in low or "verdict:changes" in low:
+        return "changes"
+    return "pass"
+
+
+def _capped_verdict(verdict: str, prior_changes: int, cap: int) -> str:
+    """Flip a 'changes' verdict to 'pass' (escalate to human) once the run has
+    already bounced back to the builder `cap` times."""
+    if verdict == "changes" and prior_changes >= cap:
+        return "pass"
+    return verdict
+
+
 def _task_for(detail, role: str) -> str:
     run = detail.run
     if role == "reviewer":
-        return f"Review the changes for {run.ticket_id}: {run.title}. Verdict pass or changes."
+        diff = next((a.content for a in reversed(detail.artifacts) if a.kind == "diff"), "")
+        return (
+            f"Review this diff for {run.ticket_id}: {run.title}.\n"
+            "Assess correctness and safety. End your reply with exactly one line: "
+            "'VERDICT: pass' if it correctly and safely implements the task, or "
+            "'VERDICT: changes' followed by what must be fixed.\n\n"
+            f"DIFF:\n{diff}"
+        )
     findings = next((e for e in reversed(detail.events)
                      if e.type == "reviewer_findings_posted"), None)
     if findings:
