@@ -15,6 +15,7 @@ checkout to go live.
 
 import asyncio
 import os
+import signal
 import subprocess
 import sys
 import urllib.request
@@ -38,8 +39,8 @@ def _agent_command(role: str, provider: str, task: str, repo_path: str) -> list[
             return ["bash", "-c", "printf '\\n# built by stub agent\\n' >> AGENT_LOG.md"]
         return ["bash", "-c", "true"]  # reviewer stub: no-op
     if provider == "codex":
-        return ["codex", "exec", task, "--sandbox", "workspace-write",
-                "--ask-for-approval", "never", "--json", "--cd", repo_path]
+        # exec is non-interactive (no approval prompts); the sandbox governs writes.
+        return ["codex", "exec", task, "-s", "workspace-write", "-C", repo_path]
     if provider == "claude":
         base = ["claude", "-p", task, "--output-format", "json"]
         return base if role == "reviewer" else base + ["--permission-mode", "acceptEdits"]
@@ -152,6 +153,12 @@ async def _main(run_id: int, role: str, provider: str) -> None:
 
 
 def main() -> None:
+    # A worker spawned by the async API server (uvicorn/uvloop) inherits a blocked
+    # signal mask that survives exec and stalls the child's async DB I/O. Clear it.
+    try:
+        signal.pthread_sigmask(signal.SIG_SETMASK, set())
+    except (AttributeError, OSError):
+        pass
     run_id, role, provider = int(sys.argv[1]), sys.argv[2], sys.argv[3]
     executor.suppress_inline()  # this worker never spawns the next; it kicks the API
     asyncio.run(_main(run_id, role, provider))
