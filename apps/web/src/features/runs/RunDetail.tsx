@@ -63,7 +63,7 @@ function ActionBar({ data }: { data: RunDetailData }) {
   const canClose = state === 'approved'
 
   return (
-    <div className="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+    <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
       {(decide.error || note.error) && (
         <p className="mb-2 text-sm text-red-600">{String(decide.error ?? note.error)}</p>
       )}
@@ -87,9 +87,9 @@ function ActionBar({ data }: { data: RunDetailData }) {
         <button
           onClick={requestChanges}
           disabled={busy || !canApprove}
-          className="rounded-lg bg-amber-500 py-2.5 font-medium text-white disabled:opacity-40"
+          className="truncate rounded-lg bg-amber-500 py-2.5 font-medium text-white disabled:opacity-40"
         >
-          Request changes
+          Changes
         </button>
         <button
           onClick={addNote}
@@ -123,7 +123,7 @@ export function RunDetailPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col">
-      <div className="flex-1 space-y-6 p-4">
+      <div className="min-w-0 flex-1 space-y-6 p-4">
         <header className="space-y-1">
           <Link to="/" className="text-sm text-slate-400">← inbox</Link>
           <div className="flex items-center justify-between gap-3">
