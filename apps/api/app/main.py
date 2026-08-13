@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.database import close_pool, get_pool
 from app.features.repos.controller import router as repos_router
 from app.features.runs.controller import router as runs_router
+from app.features.tickets.controller import router as tickets_router
 from app.services.runs_service import LeaseConflictError, RunNotFoundError
 from app.services.state_machine import IllegalTransitionError
 
@@ -31,6 +32,7 @@ app.add_middleware(
 
 app.include_router(repos_router)
 app.include_router(runs_router)
+app.include_router(tickets_router)
 
 
 @app.exception_handler(RunNotFoundError)

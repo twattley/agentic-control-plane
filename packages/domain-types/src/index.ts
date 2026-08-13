@@ -114,3 +114,13 @@ export interface RunDetail {
   artifacts: Artifact[]
   leases: Lease[]
 }
+
+/** A markdown file in the repo checkout's tickets/ folder. Mirrors Ticket. */
+export interface Ticket {
+  slug: string
+  title: string
+}
+
+export interface TicketDetail extends Ticket {
+  content: string
+}

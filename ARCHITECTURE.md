@@ -62,6 +62,15 @@ releases the acting role's lease (builder hands off at `brief`, reviewer at
 The **phone inbox** is three queue reads: `/queue/review`, `/queue/fix`,
 `/queue/human` — "runs waiting on the reviewer / builder / you".
 
+## Tickets
+
+A ticket is a markdown file in `tickets/` at the repo checkout root — thrashed
+out in an interactive agent session, read-only to the control plane (no table;
+`GET /repos/:id/tickets` lists the folder). The UI renders a ticket and "Start
+work" creates a run with `ticket_id = <filename stem>`. Whenever a worker finds
+`tickets/<ticket_id>.md` in the checkout, every role's prompt points at it —
+the file, not the run title, is the spec.
+
 ## Feature layout
 
 Each backend feature lives at `apps/api/app/features/<name>/`:

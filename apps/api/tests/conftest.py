@@ -8,6 +8,9 @@ from httpx import ASGITransport, AsyncClient
 # Bearer header every test sends. Matches the dev default in Settings.auth_token.
 AUTH = {"Authorization": f"Bearer {settings.auth_token}"}
 
+# Tests must never spawn real agent workers, whatever the live .env says.
+settings.dispatch_enabled = False
+
 _TABLES = ["decisions", "leases", "artifacts", "events", "runs", "repos"]
 
 

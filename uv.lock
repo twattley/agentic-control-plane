@@ -10,7 +10,7 @@ members = [
 [[package]]
 name = "agentic-control-plane"
 version = "0.1.0"
-source = { virtual = "apps/api" }
+source = { editable = "apps/api" }
 dependencies = [
     { name = "asyncpg" },
     { name = "fastapi" },

@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import urllib.request
+from pathlib import Path
 
 import asyncpg
 
@@ -74,7 +75,7 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
     if repo is None:
         return "skipped"
 
-    task = _task_for(detail, role)
+    task = _task_for(detail, role, repo.path)
     result = subprocess.run(
         _agent_command(role, provider, task, repo.path),
         cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
@@ -186,12 +187,13 @@ def _capped_verdict(verdict: str, prior_changes: int, cap: int) -> str:
     return verdict
 
 
-def _task_for(detail, role: str) -> str:
+def _task_for(detail, role: str, repo_path: str) -> str:
     run = detail.run
+    spec = _spec_note(repo_path, run.ticket_id)
     if role == "reviewer":
         diff = next((a.content for a in reversed(detail.artifacts) if a.kind == "diff"), "")
         return (
-            f"Review this diff for {run.ticket_id}: {run.title}.\n"
+            f"Review this diff for {run.ticket_id}: {run.title}.{spec}\n"
             "Assess correctness and safety. End your reply with exactly one line: "
             "'VERDICT: pass' if it correctly and safely implements the task, or "
             "'VERDICT: changes' followed by what must be fixed.\n\n"
@@ -200,12 +202,20 @@ def _task_for(detail, role: str) -> str:
     findings = next((e for e in reversed(detail.events)
                      if e.type == "reviewer_findings_posted"), None)
     if findings:
-        return (f"Address the reviewer findings on {run.ticket_id}: {run.title}. "
+        return (f"Address the reviewer findings on {run.ticket_id}: {run.title}.{spec} "
                 f"Findings: {findings.payload.get('summary', '')}")
     if run.mode == "tdd":
-        return (f"Implement {run.ticket_id}: {run.title}. Work test-first: write a "
+        return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it passes.")
-    return f"Implement {run.ticket_id}: {run.title}."
+    return f"Implement {run.ticket_id}: {run.title}.{spec}"
+
+
+def _spec_note(repo_path: str, ticket_id: str) -> str:
+    """If the checkout has a ticket file for this run, every prompt points at it —
+    the file, not the run title, is the full spec."""
+    if (Path(repo_path) / "tickets" / f"{ticket_id}.md").is_file():
+        return f" The full specification is in tickets/{ticket_id}.md — read it first."
+    return ""
 
 
 def _log(msg: str) -> None:

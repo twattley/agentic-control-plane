@@ -8,6 +8,8 @@ import type {
   Run,
   RunDetail,
   RunInput,
+  Ticket,
+  TicketDetail,
 } from '@agentic-control-plane/domain-types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiFetch, apiPost } from './http'
@@ -36,6 +38,22 @@ export function useRegisterRepo() {
   return useMutation({
     mutationFn: (body: RepoInput) => apiPost<Repo>('/repos', body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['repos'] }),
+  })
+}
+
+export function useTickets(repoId: number) {
+  return useQuery({
+    queryKey: ['tickets', repoId],
+    queryFn: () => apiFetch<Ticket[]>(`/repos/${repoId}/tickets`),
+    refetchInterval: 10_000, // tickets are edited outside the UI — keep the list fresh
+  })
+}
+
+export function useTicket(repoId: number, slug: string | null) {
+  return useQuery({
+    queryKey: ['ticket', repoId, slug],
+    queryFn: () => apiFetch<TicketDetail>(`/repos/${repoId}/tickets/${slug}`),
+    enabled: slug !== null,
   })
 }
 
