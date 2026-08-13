@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     reviewer_provider: str = "stub"
     # Where a finished worker kicks the API to dispatch the next agent.
     api_url: str = "http://127.0.0.1:8400"
+    # Permission mode for a Claude builder pass. "acceptEdits" auto-approves file
+    # edits but still refuses unlisted Bash commands (allowlist those in the target
+    # repo's .claude/settings.json); "bypassPermissions" is full yolo.
+    claude_permission_mode: str = "acceptEdits"
     # Max "changes" verdicts before the reviewer escalates to the human instead
     # of bouncing the run back to the builder — bounds build<->review spend.
     max_review_rounds: int = 2

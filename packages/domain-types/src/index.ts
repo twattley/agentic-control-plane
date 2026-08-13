@@ -41,6 +41,10 @@ export interface AvailableProject {
 
 export type RunMode = 'direct' | 'tdd'
 
+/** Agent choice as "provider[:model]" — e.g. "claude:sonnet", "codex", "stub".
+ * null falls back to the API's global provider setting. */
+export type ProviderSpec = string
+
 export interface Run {
   id: number
   repo_id: number
@@ -48,6 +52,8 @@ export interface Run {
   title: string
   mode: RunMode
   state: RunState
+  builder_provider: ProviderSpec | null
+  reviewer_provider: ProviderSpec | null
   created_at: string
   updated_at: string
 }
@@ -57,6 +63,12 @@ export interface RunInput {
   ticket_id: string
   title: string
   mode: RunMode
+  builder_provider?: ProviderSpec | null
+  reviewer_provider?: ProviderSpec | null
+}
+
+export interface DispatchInput {
+  provider?: ProviderSpec | null
 }
 
 export interface Event {

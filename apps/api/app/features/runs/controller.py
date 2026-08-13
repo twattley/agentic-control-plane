@@ -9,6 +9,7 @@ from app.features.runs.models import (
     ArtifactIn,
     ClaimIn,
     DecisionIn,
+    DispatchIn,
     Event,
     EventIn,
     Run,
@@ -62,9 +63,10 @@ async def post_decision(run_id: int, data: DecisionIn) -> Run:
 
 
 @router.post("/runs/{run_id}/dispatch", status_code=status.HTTP_202_ACCEPTED)
-async def dispatch_run(run_id: int) -> dict:
+async def dispatch_run(run_id: int, data: DispatchIn | None = None) -> dict:
     """Manual re-run: (re)dispatch the agent the current state is waiting on."""
-    role = await runs_service.dispatch_current(await get_pool(), run_id)
+    provider = data.provider if data else None
+    role = await runs_service.dispatch_current(await get_pool(), run_id, provider)
     return {"dispatched": role}
 
 

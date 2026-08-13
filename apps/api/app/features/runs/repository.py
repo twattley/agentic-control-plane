@@ -18,11 +18,13 @@ from app.features.runs.models import (
 async def create_run(conn: asyncpg.Connection, data: RunIn) -> Run:
     row = await conn.fetchrow(
         """
-        INSERT INTO runs (repo_id, ticket_id, title, mode)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, repo_id, ticket_id, title, mode, state, created_at, updated_at
+        INSERT INTO runs (repo_id, ticket_id, title, mode, builder_provider, reviewer_provider)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, repo_id, ticket_id, title, mode, state,
+                  builder_provider, reviewer_provider, created_at, updated_at
         """,
         data.repo_id, data.ticket_id, data.title, data.mode,
+        data.builder_provider, data.reviewer_provider,
     )
     return Run(**dict(row))
 
@@ -30,7 +32,8 @@ async def create_run(conn: asyncpg.Connection, data: RunIn) -> Run:
 async def get_run(conn: asyncpg.Connection, run_id: int) -> Run | None:
     row = await conn.fetchrow(
         """
-        SELECT id, repo_id, ticket_id, title, mode, state, created_at, updated_at
+        SELECT id, repo_id, ticket_id, title, mode, state,
+               builder_provider, reviewer_provider, created_at, updated_at
         FROM runs WHERE id = $1
         """,
         run_id,
@@ -42,14 +45,16 @@ async def list_runs(conn: asyncpg.Connection, repo_id: int | None = None) -> lis
     if repo_id is None:
         rows = await conn.fetch(
             """
-            SELECT id, repo_id, ticket_id, title, mode, state, created_at, updated_at
+            SELECT id, repo_id, ticket_id, title, mode, state,
+                   builder_provider, reviewer_provider, created_at, updated_at
             FROM runs ORDER BY id DESC
             """
         )
     else:
         rows = await conn.fetch(
             """
-            SELECT id, repo_id, ticket_id, title, mode, state, created_at, updated_at
+            SELECT id, repo_id, ticket_id, title, mode, state,
+                   builder_provider, reviewer_provider, created_at, updated_at
             FROM runs WHERE repo_id = $1 ORDER BY id DESC
             """,
             repo_id,
@@ -60,7 +65,8 @@ async def list_runs(conn: asyncpg.Connection, repo_id: int | None = None) -> lis
 async def runs_in_states(conn: asyncpg.Connection, states: list[str]) -> list[Run]:
     rows = await conn.fetch(
         """
-        SELECT id, repo_id, ticket_id, title, mode, state, created_at, updated_at
+        SELECT id, repo_id, ticket_id, title, mode, state,
+               builder_provider, reviewer_provider, created_at, updated_at
         FROM runs WHERE state = ANY($1::text[]) ORDER BY updated_at
         """,
         states,

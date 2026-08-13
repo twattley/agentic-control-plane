@@ -34,18 +34,30 @@ from app.services.state_machine import IllegalTransitionError
 _TIMEOUT_S = 1800  # a real build can take a while; a stub returns instantly
 
 
+def _split_spec(provider: str) -> tuple[str, str]:
+    """A provider spec is "provider[:model]" — e.g. "claude:sonnet", "codex"."""
+    base, _, model = provider.partition(":")
+    return base, model
+
+
 def _agent_command(role: str, provider: str, task: str, repo_path: str) -> list[str]:
-    if provider == "stub":
+    base, model = _split_spec(provider)
+    if base == "stub":
         if role == "builder":
             # deterministic tiny edit so the builder produces a real git diff
             return ["bash", "-c", "printf '\\n# built by stub agent\\n' >> AGENT_LOG.md"]
         return ["bash", "-c", "true"]  # reviewer stub: no-op
-    if provider == "codex":
+    if base == "codex":
         # exec is non-interactive (no approval prompts); the sandbox governs writes.
-        return ["codex", "exec", task, "-s", "workspace-write", "-C", repo_path]
-    if provider == "claude":
-        base = ["claude", "-p", task, "--output-format", "json"]
-        return base if role == "reviewer" else base + ["--permission-mode", "acceptEdits"]
+        cmd = ["codex", "exec", task, "-s", "workspace-write", "-C", repo_path]
+        return cmd + ["-m", model] if model else cmd
+    if base == "claude":
+        cmd = ["claude", "-p", task, "--output-format", "json"]
+        if model:
+            cmd += ["--model", model]
+        if role != "reviewer":  # reviewer is read-only; builder needs write perms
+            cmd += ["--permission-mode", settings.claude_permission_mode]
+        return cmd
     raise ValueError(f"unknown provider: {provider}")
 
 
@@ -158,7 +170,7 @@ async def _post_gate(pool: asyncpg.Pool, run_id: int, event_type: str, summary: 
 def _agent_message(stdout: str, provider: str) -> str:
     """The human-readable final message. Claude's `-p --output-format json` wraps
     it in a `result` field; other providers print plain text."""
-    if provider == "claude":
+    if _split_spec(provider)[0] == "claude":
         try:
             return json.loads(stdout).get("result", stdout)
         except (json.JSONDecodeError, AttributeError):

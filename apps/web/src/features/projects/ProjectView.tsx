@@ -1,21 +1,63 @@
-import type { Run, RunMode, Ticket } from '@agentic-control-plane/domain-types'
+import type { ProviderSpec, Run, RunMode, Ticket } from '@agentic-control-plane/domain-types'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import { useCreateRun, useRepo, useRepoRuns, useTicket, useTickets } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 
+// The agents on offer, as "provider[:model]" specs the worker expands into CLI
+// flags. Defaults: Sonnet builds, Codex reviews.
+const AGENTS: { value: ProviderSpec; label: string }[] = [
+  { value: 'claude:sonnet', label: 'Claude Sonnet' },
+  { value: 'claude:opus', label: 'Claude Opus' },
+  { value: 'codex', label: 'Codex' },
+  { value: 'stub', label: 'Stub (no-op)' },
+]
+const DEFAULT_BUILDER: ProviderSpec = 'claude:sonnet'
+const DEFAULT_REVIEWER: ProviderSpec = 'codex'
+
+function AgentPicker({
+  builder, reviewer, onBuilder, onReviewer,
+}: {
+  builder: ProviderSpec
+  reviewer: ProviderSpec
+  onBuilder: (s: ProviderSpec) => void
+  onReviewer: (s: ProviderSpec) => void
+}) {
+  const select = (value: ProviderSpec, onChange: (s: ProviderSpec) => void, label: string) => (
+    <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-slate-500">
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="rounded border border-slate-300 bg-white px-2 py-2 text-sm font-normal text-slate-900">
+        {AGENTS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+      </select>
+    </label>
+  )
+  return (
+    <div className="flex gap-2">
+      {select(builder, onBuilder, 'builds')}
+      {select(reviewer, onReviewer, 'reviews')}
+    </div>
+  )
+}
+
 function NewFeatureForm({ repoId }: { repoId: number }) {
   const create = useCreateRun(repoId)
   const [title, setTitle] = useState('')
   const [ticket, setTicket] = useState('')
   const [mode, setMode] = useState<RunMode>('direct')
+  const [builder, setBuilder] = useState<ProviderSpec>(DEFAULT_BUILDER)
+  const [reviewer, setReviewer] = useState<ProviderSpec>(DEFAULT_REVIEWER)
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title) return
     create.mutate(
-      { repo_id: repoId, ticket_id: ticket || title.toLowerCase().replace(/\s+/g, '-').slice(0, 40), title, mode },
+      {
+        repo_id: repoId,
+        ticket_id: ticket || title.toLowerCase().replace(/\s+/g, '-').slice(0, 40),
+        title, mode, builder_provider: builder, reviewer_provider: reviewer,
+      },
       { onSuccess: () => { setTitle(''); setTicket('') } },
     )
   }
@@ -30,6 +72,8 @@ function NewFeatureForm({ repoId }: { repoId: number }) {
         placeholder="ticket id (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} />
 
       <ModeToggle mode={mode} onChange={setMode} />
+      <AgentPicker builder={builder} reviewer={reviewer}
+        onBuilder={setBuilder} onReviewer={setReviewer} />
 
       <button disabled={create.isPending}
         className="w-full rounded-lg bg-blue-600 py-2.5 font-medium text-white disabled:opacity-40">
@@ -58,6 +102,8 @@ function ModeToggle({ mode, onChange }: { mode: RunMode; onChange: (m: RunMode) 
 function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; runs: Run[] }) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<RunMode>('direct')
+  const [builder, setBuilder] = useState<ProviderSpec>(DEFAULT_BUILDER)
+  const [reviewer, setReviewer] = useState<ProviderSpec>(DEFAULT_REVIEWER)
   const create = useCreateRun(repoId)
   const { data: detail } = useTicket(repoId, open ? ticket.slug : null)
 
@@ -67,7 +113,10 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
   const active = run && run.state !== 'closed' && run.state !== 'blocked'
 
   const start = () =>
-    create.mutate({ repo_id: repoId, ticket_id: ticket.slug, title: ticket.title, mode })
+    create.mutate({
+      repo_id: repoId, ticket_id: ticket.slug, title: ticket.title, mode,
+      builder_provider: builder, reviewer_provider: reviewer,
+    })
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
@@ -96,6 +145,8 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
           {!active && (
             <>
               <ModeToggle mode={mode} onChange={setMode} />
+              <AgentPicker builder={builder} reviewer={reviewer}
+                onBuilder={setBuilder} onReviewer={setReviewer} />
               <button type="button" onClick={start} disabled={create.isPending}
                 className="w-full rounded-lg bg-blue-600 py-2.5 font-medium text-white disabled:opacity-40">
                 {create.isPending ? 'starting…' : run ? 'Start another run' : 'Start work on this ticket'}

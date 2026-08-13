@@ -8,6 +8,10 @@ class RunIn(BaseModel):
     ticket_id: str
     title: str
     mode: str = "direct"  # 'direct' | 'tdd'
+    # Agent choice per role, as "provider[:model]" — e.g. "claude:sonnet",
+    # "codex". None falls back to the global settings default.
+    builder_provider: str | None = None
+    reviewer_provider: str | None = None
 
 
 class Run(BaseModel):
@@ -17,6 +21,8 @@ class Run(BaseModel):
     title: str
     mode: str
     state: str
+    builder_provider: str | None = None
+    reviewer_provider: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -52,6 +58,12 @@ class Artifact(BaseModel):
     kind: str
     content: str
     created_at: datetime
+
+
+class DispatchIn(BaseModel):
+    """One-off override for a manual dispatch; omit to use the run's choice."""
+
+    provider: str | None = None  # "provider[:model]"
 
 
 class DecisionIn(BaseModel):

@@ -46,7 +46,7 @@ async def create_run(pool: asyncpg.Pool, data: RunIn) -> Run:
     async with pool.acquire() as conn, conn.transaction():
         run = await repo.create_run(conn, data)
         await repo.append_event(conn, run.id, EventIn(type="run_created", actor="system"))
-    executor.maybe_dispatch(run.id, run.state)  # a new run is queued -> builder
+    executor.maybe_dispatch(run, run.state)  # a new run is queued -> builder
     return run
 
 
@@ -92,7 +92,7 @@ async def record_event(pool: asyncpg.Pool, run_id: int, data: EventIn) -> Event:
             await repo.release_lease(conn, run_id, data.actor)
             await repo.set_state(conn, run_id, new_state)
     if new_state is not None:
-        executor.maybe_dispatch(run_id, new_state)  # e.g. awaiting_review -> reviewer
+        executor.maybe_dispatch(run, new_state)  # e.g. awaiting_review -> reviewer
     return event
 
 
@@ -121,7 +121,7 @@ async def decide(pool: asyncpg.Pool, run_id: int, data: DecisionIn) -> Run:
         )
         await repo.set_state(conn, run_id, new_state)
         updated = await repo.get_run(conn, run_id)
-    executor.maybe_dispatch(run_id, new_state)  # request_changes -> needs_work -> builder
+    executor.maybe_dispatch(updated, new_state)  # request_changes -> needs_work -> builder
     return updated  # type: ignore[return-value]
 
 
@@ -146,8 +146,9 @@ async def queue(pool: asyncpg.Pool, name: str) -> list[Run]:
         return await repo.runs_in_states(conn, _QUEUES[name])
 
 
-async def dispatch_current(pool: asyncpg.Pool, run_id: int) -> str:
+async def dispatch_current(pool: asyncpg.Pool, run_id: int, provider: str | None = None) -> str:
     """Manual re-run: force-dispatch the agent the current state is waiting on.
+    An explicit `provider` overrides the run's stored choice for this pass only.
 
     Safe to press repeatedly — a duplicate worker loses the claim race and exits.
     """
@@ -156,5 +157,5 @@ async def dispatch_current(pool: asyncpg.Pool, run_id: int) -> str:
     role = ROLE_FOR_STATE.get(run.state)
     if role is None:
         raise IllegalTransitionError(run.state, "dispatch")
-    executor.dispatch(run_id, role)
+    executor.dispatch(run_id, role, provider or executor.run_provider(run, role))
     return role

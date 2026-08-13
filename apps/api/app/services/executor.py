@@ -48,6 +48,7 @@ def dispatch(run_id: int, role: str, provider: str | None = None) -> None:
         "AGENTIC_CONTROL_PLANE_DISPATCH_ENABLED": str(settings.dispatch_enabled),
         "AGENTIC_CONTROL_PLANE_BUILDER_PROVIDER": settings.builder_provider,
         "AGENTIC_CONTROL_PLANE_REVIEWER_PROVIDER": settings.reviewer_provider,
+        "AGENTIC_CONTROL_PLANE_CLAUDE_PERMISSION_MODE": settings.claude_permission_mode,
         "AGENTIC_CONTROL_PLANE_API_URL": settings.api_url,
         "AGENTIC_CONTROL_PLANE_AUTH_TOKEN": settings.auth_token,
     }
@@ -63,15 +64,29 @@ def dispatch(run_id: int, role: str, provider: str | None = None) -> None:
     )
 
 
-def maybe_dispatch(run_id: int, state: str) -> None:
+def maybe_dispatch(run, state: str) -> None:
     """Auto-dispatch the owner of `state`, if enabled. No-op inside a worker
     (inline suppressed) — the worker kicks the API to dispatch instead."""
     if not settings.dispatch_enabled:
         return
     role = ROLE_FOR_STATE.get(state)
     if role and _inline:
-        dispatch(run_id, role)
+        dispatch(run.id, role, run_provider(run, role))
+
+
+def run_provider(run, role: str) -> str | None:
+    """The run's own agent choice for `role`, or None to use the global default.
+    The closer isn't an agent — it's always the system's gate+commit pass."""
+    if role == "reviewer":
+        return run.reviewer_provider
+    if role == "builder":
+        return run.builder_provider
+    return "system"
 
 
 def _provider_for(role: str) -> str:
-    return settings.reviewer_provider if role == "reviewer" else settings.builder_provider
+    if role == "reviewer":
+        return settings.reviewer_provider
+    if role == "builder":
+        return settings.builder_provider
+    return "system"

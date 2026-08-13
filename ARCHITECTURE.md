@@ -71,6 +71,21 @@ work" creates a run with `ticket_id = <filename stem>`. Whenever a worker finds
 `tickets/<ticket_id>.md` in the checkout, every role's prompt points at it —
 the file, not the run title, is the spec.
 
+## Agents
+
+Who runs a pass is chosen **per run**: `runs.builder_provider` / `runs.reviewer_provider`
+hold a provider spec — `provider[:model]`, e.g. `claude:sonnet`, `codex`, `stub` —
+picked in the UI at "Start work" (NULL falls back to the global
+`AGENTIC_CONTROL_PLANE_{BUILDER,REVIEWER}_PROVIDER` setting). The worker expands
+the spec into CLI flags (`claude --model sonnet`, `codex exec -m …`). A manual
+`POST /runs/:id/dispatch {"provider": …}` overrides the stored choice for one pass.
+
+A Claude builder runs with `--permission-mode acceptEdits` by default — file edits
+are auto-approved but unlisted Bash commands are refused; allowlist the repo's test
+commands in the target repo's `.claude/settings.json`, or set
+`AGENTIC_CONTROL_PLANE_CLAUDE_PERMISSION_MODE=bypassPermissions` to go full yolo.
+A Codex pass is sandboxed by the CLI itself (`-s workspace-write`).
+
 ## Feature layout
 
 Each backend feature lives at `apps/api/app/features/<name>/`:
