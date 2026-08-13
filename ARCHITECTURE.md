@@ -71,6 +71,14 @@ work" creates a run with `ticket_id = <filename stem>`. Whenever a worker finds
 `tickets/<ticket_id>.md` in the checkout, every role's prompt points at it —
 the file, not the run title, is the spec.
 
+**Ticket-writing is an interface with a freeze step**: discuss → freeze →
+build. Freezing writes a `## Summary` section — two or three sentences aimed
+at future-you re-entering cold (test scenarios follow it when they exist).
+That summary is the re-entry blurb the **workbench** shows: `GET /board`
+returns one pane per active run (run + repo name + frozen summary + last
+event), grouped by project on the home page, runs waiting on the human first.
+No `## Summary` → the ticket's first prose paragraph stands in.
+
 ## Agents
 
 Who runs a pass is chosen **per run**: `runs.builder_provider` / `runs.reviewer_provider`

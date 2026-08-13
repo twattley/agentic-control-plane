@@ -7,20 +7,34 @@ No tables: a ticket becomes a row only when a run is started from it.
 from pathlib import Path
 
 from app.features.tickets.models import Ticket, TicketDetail
+from app.services.markdown import first_prose_paragraph, section
 
 
 def list_tickets(repo_path: str) -> list[Ticket]:
     folder = Path(repo_path) / "tickets"
     if not folder.is_dir():
         return []
-    return [Ticket(slug=p.stem, title=_title(p)) for p in sorted(folder.glob("*.md"))]
+    return [
+        Ticket(slug=p.stem, title=_title(p), summary=ticket_summary(p))
+        for p in sorted(folder.glob("*.md"))
+    ]
 
 
 def get_ticket(repo_path: str, slug: str) -> TicketDetail | None:
     path = _resolve(repo_path, slug)
     if path is None:
         return None
-    return TicketDetail(slug=slug, title=_title(path), content=path.read_text())
+    return TicketDetail(
+        slug=slug, title=_title(path), summary=ticket_summary(path), content=path.read_text()
+    )
+
+
+def ticket_summary(path: Path) -> str | None:
+    """The re-entry blurb: the `## Summary` section (written at ticket freeze),
+    else the file's first prose paragraph. Also used by the workbench board."""
+    text = path.read_text()
+    frozen = section(text, "Summary")
+    return first_prose_paragraph(frozen if frozen is not None else text)
 
 
 def _resolve(repo_path: str, slug: str) -> Path | None:

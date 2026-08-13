@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import get_pool
 from app.features.repos import repository
 from app.features.repos.models import Repo, RepoIn
+from app.services.markdown import first_prose_paragraph
 
 router = APIRouter(prefix="/api/v1/repos", tags=["repos"], dependencies=[Depends(require_token)])
 
@@ -50,33 +51,9 @@ def _pretty(slug: str) -> str:
 
 
 def _described(repo: Repo) -> Repo:
-    repo.description = _readme_blurb(Path(repo.path) / "README.md")
+    readme = Path(repo.path) / "README.md"
+    repo.description = first_prose_paragraph(readme.read_text()) if readme.is_file() else None
     return repo
-
-
-def _readme_blurb(readme: Path) -> str | None:
-    """The README's first prose paragraph, joined to one line. Headings, badges,
-    images and rules are skipped; a blockquote tagline counts as prose."""
-    if not readme.is_file():
-        return None
-    para: list[str] = []
-    in_fence = False
-    for raw in readme.read_text().splitlines():
-        line = raw.strip().removeprefix("> ").strip()
-        if line.startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        if not line or line.startswith(("#", "![", "[!", "---", "===")):
-            if para:
-                break
-            continue
-        para.append(line)
-    if not para:
-        return None
-    text = " ".join(para)
-    return text[:217] + "…" if len(text) > 220 else text
 
 
 @router.get("/{repo_id}")

@@ -1,16 +1,20 @@
 import { Link } from 'react-router-dom'
 import { useRepos } from '../../api/hooks'
+import { Workbench } from '../runs/Workbench'
 
 export function Projects() {
   const { data: repos, isLoading } = useRepos()
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-4">
+    <div className="mx-auto max-w-3xl space-y-8 p-4">
       <header className="flex items-baseline justify-between pt-2">
-        <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Control Plane</h1>
         <Link to="/inbox" className="text-sm font-medium text-blue-600">Inbox →</Link>
       </header>
 
-      <div className="space-y-2">
+      <Workbench />
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold text-slate-800">Projects</h2>
         {isLoading && <p className="text-sm text-slate-400">loading…</p>}
         {!isLoading && !repos?.length && (
           <p className="text-sm text-slate-400">
@@ -26,7 +30,7 @@ export function Projects() {
             )}
           </Link>
         ))}
-      </div>
+      </section>
     </div>
   )
 }

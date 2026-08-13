@@ -121,8 +121,20 @@ export interface RunDetail {
 export interface Ticket {
   slug: string
   title: string
+  /** Re-entry blurb: the `## Summary` section written at ticket freeze,
+   * else the first prose paragraph. */
+  summary: string | null
 }
 
 export interface TicketDetail extends Ticket {
   content: string
+}
+
+/** One workbench pane: an active run plus everything needed to re-enter it
+ * cold. Mirrors BoardPane. */
+export interface BoardPane {
+  run: Run
+  repo_name: string
+  summary: string | null
+  last_event: Event | null
 }

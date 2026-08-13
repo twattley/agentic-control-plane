@@ -88,3 +88,13 @@ class RunDetail(BaseModel):
     events: list[Event]
     artifacts: list[Artifact]
     leases: list[Lease]
+
+
+class BoardPane(BaseModel):
+    """One workbench pane: an active run plus everything needed to re-enter it
+    cold — project name, the frozen ticket summary, and what just happened."""
+
+    run: Run
+    repo_name: str
+    summary: str | None
+    last_event: Event | None

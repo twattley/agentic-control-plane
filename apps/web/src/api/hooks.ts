@@ -1,4 +1,5 @@
 import type {
+  BoardPane,
   DecisionInput,
   EventInput,
   QueueName,
@@ -27,6 +28,14 @@ export function useRepos() {
 
 export function useRepo(id: number) {
   return useQuery({ queryKey: ['repo', id], queryFn: () => apiFetch<Repo>(`/repos/${id}`) })
+}
+
+export function useBoard() {
+  return useQuery({
+    queryKey: ['board'],
+    queryFn: () => apiFetch<BoardPane[]>('/board'),
+    refetchInterval: 5_000, // agents move runs along in the background
+  })
 }
 
 export function useTickets(repoId: number) {

@@ -6,13 +6,17 @@ Every state-changing operation computes the legal target state *before* writing,
 so an illegal request touches no rows.
 """
 
+from pathlib import Path
+
 import asyncpg
 
 from app.config import ROLE_FOR_STATE
+from app.features.repos import repository as repos_repo
 from app.features.runs import repository as repo
 from app.features.runs.models import (
     Artifact,
     ArtifactIn,
+    BoardPane,
     ClaimIn,
     DecisionIn,
     Event,
@@ -21,6 +25,7 @@ from app.features.runs.models import (
     RunDetail,
     RunIn,
 )
+from app.features.tickets.repository import ticket_summary
 from app.services import executor, state_machine
 from app.services.state_machine import IllegalTransitionError
 
@@ -144,6 +149,34 @@ _QUEUES = {
 async def queue(pool: asyncpg.Pool, name: str) -> list[Run]:
     async with pool.acquire() as conn:
         return await repo.runs_in_states(conn, _QUEUES[name])
+
+
+# Everything still moving — a pane per run in one of these.
+_ACTIVE_STATES = [
+    "queued", "building", "awaiting_review", "reviewing",
+    "needs_work", "fixing", "awaiting_human", "approved", "closing",
+]
+
+
+async def board(pool: asyncpg.Pool) -> list[BoardPane]:
+    """One pane per active run: run + repo name + frozen ticket summary + last
+    event. The workbench reads this in a single request."""
+    async with pool.acquire() as conn:
+        runs = await repo.runs_in_states(conn, _ACTIVE_STATES)
+        panes = []
+        for run in sorted(runs, key=lambda r: r.updated_at, reverse=True):
+            repo_row = await repos_repo.get_repo(pool, run.repo_id)
+            if repo_row is None:
+                continue
+            events = await repo.list_events(conn, run.id)
+            ticket_file = Path(repo_row.path) / "tickets" / f"{run.ticket_id}.md"
+            panes.append(BoardPane(
+                run=run,
+                repo_name=repo_row.name,
+                summary=ticket_summary(ticket_file) if ticket_file.is_file() else None,
+                last_event=events[-1] if events else None,
+            ))
+        return panes
 
 
 async def dispatch_current(pool: asyncpg.Pool, run_id: int, provider: str | None = None) -> str:

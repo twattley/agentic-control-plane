@@ -7,6 +7,7 @@ from app.database import get_pool
 from app.features.runs.models import (
     Artifact,
     ArtifactIn,
+    BoardPane,
     ClaimIn,
     DecisionIn,
     DispatchIn,
@@ -73,3 +74,9 @@ async def dispatch_run(run_id: int, data: DispatchIn | None = None) -> dict:
 @router.get("/queue/{name}")
 async def get_queue(name: QueueName) -> list[Run]:
     return await runs_service.queue(await get_pool(), name.value)
+
+
+@router.get("/board")
+async def get_board() -> list[BoardPane]:
+    """The workbench: one pane per active run across every project."""
+    return await runs_service.board(await get_pool())

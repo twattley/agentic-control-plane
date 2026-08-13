@@ -33,6 +33,31 @@ async def test_list_tickets_returns_md_files_with_titles(client, tmp_path):
     assert by_slug["ACP-10"]["title"] == "ACP-10"  # no heading -> slug
 
 
+async def test_ticket_summary_prefers_the_summary_section(client, tmp_path):
+    tickets = tmp_path / "tickets"
+    tickets.mkdir()
+    (tickets / "ACP-5.md").write_text(
+        "# Big feature\n\nLong rambling context paragraph.\n\n"
+        "## Summary\n\nFrozen at review: swap the flux capacitor,\nkeep the API stable.\n\n"
+        "## Scenarios\n- one\n"
+    )
+    repo_id = await _register(client, str(tmp_path))
+
+    body = (await client.get(f"/api/v1/repos/{repo_id}/tickets", headers=AUTH)).json()
+
+    assert body[0]["summary"] == "Frozen at review: swap the flux capacitor, keep the API stable."
+
+
+async def test_ticket_summary_falls_back_to_first_paragraph(client, tmp_path):
+    _make_tickets(tmp_path)  # ACP-2 has no Summary section, first prose = "Details here."
+    repo_id = await _register(client, str(tmp_path))
+
+    body = (await client.get(f"/api/v1/repos/{repo_id}/tickets", headers=AUTH)).json()
+
+    by_slug = {t["slug"]: t for t in body}
+    assert by_slug["ACP-2"]["summary"] == "Details here."
+
+
 async def test_list_tickets_no_folder_is_empty(client, tmp_path):
     repo_id = await _register(client, str(tmp_path))
     resp = await client.get(f"/api/v1/repos/{repo_id}/tickets", headers=AUTH)
