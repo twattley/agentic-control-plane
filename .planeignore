@@ -1,0 +1,2 @@
+# This file hides the project from the control plane's projects list.
+# The plane shouldn't offer to run agent tickets on itself.
