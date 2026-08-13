@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Ticket(BaseModel):
@@ -14,3 +14,14 @@ class TicketDetail(BaseModel):
     title: str
     summary: str | None = None
     content: str       # raw markdown
+
+
+class TicketCreate(BaseModel):
+    # A slug is a filename stem, never a path: letters/digits/dot/dash/underscore,
+    # not starting with a dot. The regex is the write-path traversal guard.
+    slug: str = Field(pattern=r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$")
+    content: str
+
+
+class TicketUpdate(BaseModel):
+    content: str

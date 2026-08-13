@@ -130,6 +130,15 @@ export interface TicketDetail extends Ticket {
   content: string
 }
 
+export interface TicketCreateInput {
+  slug: string
+  content: string
+}
+
+export interface TicketUpdateInput {
+  content: string
+}
+
 /** One workbench pane: an active run plus everything needed to re-enter it
  * cold. Mirrors BoardPane. */
 export interface BoardPane {

@@ -1,7 +1,9 @@
 """Tickets are markdown files in `tickets/` at the repo checkout root.
 
-The checkout is the source of truth — the control plane reads it, never writes.
-No tables: a ticket becomes a row only when a run is started from it.
+The checkout is the source of truth. `tickets/` is the plane's ONE write
+surface — the UI's ticket composer creates and edits files here; nothing else
+in a checkout is ever written. No tables: a ticket becomes a row only when a
+run is started from it.
 """
 
 from pathlib import Path
@@ -27,6 +29,27 @@ def get_ticket(repo_path: str, slug: str) -> TicketDetail | None:
     return TicketDetail(
         slug=slug, title=_title(path), summary=ticket_summary(path), content=path.read_text()
     )
+
+
+class TicketExistsError(Exception):
+    """Create refused: the slug already has a file (edit goes through update)."""
+
+
+def create_ticket(repo_path: str, slug: str, content: str) -> TicketDetail:
+    folder = Path(repo_path) / "tickets"
+    folder.mkdir(exist_ok=True)
+    if _resolve(repo_path, slug) is not None:
+        raise TicketExistsError(slug)
+    (folder / f"{slug}.md").write_text(content)
+    return get_ticket(repo_path, slug)  # type: ignore[return-value]
+
+
+def update_ticket(repo_path: str, slug: str, content: str) -> TicketDetail | None:
+    path = _resolve(repo_path, slug)
+    if path is None:
+        return None
+    path.write_text(content)
+    return get_ticket(repo_path, slug)
 
 
 def ticket_summary(path: Path) -> str | None:

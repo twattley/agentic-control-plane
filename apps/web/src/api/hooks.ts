@@ -8,10 +8,11 @@ import type {
   RunDetail,
   RunInput,
   Ticket,
+  TicketCreateInput,
   TicketDetail,
 } from '@agentic-control-plane/domain-types'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { apiFetch, apiPost } from './http'
+import { apiFetch, apiPost, apiPut } from './http'
 import { queryClient } from './queryClient'
 
 const QUEUES: QueueName[] = ['review', 'fix', 'human']
@@ -51,6 +52,25 @@ export function useTicket(repoId: number, slug: string | null) {
     queryKey: ['ticket', repoId, slug],
     queryFn: () => apiFetch<TicketDetail>(`/repos/${repoId}/tickets/${slug}`),
     enabled: slug !== null,
+  })
+}
+
+export function useCreateTicket(repoId: number) {
+  return useMutation({
+    mutationFn: (body: TicketCreateInput) =>
+      apiPost<TicketDetail>(`/repos/${repoId}/tickets`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets', repoId] }),
+  })
+}
+
+export function useUpdateTicket(repoId: number) {
+  return useMutation({
+    mutationFn: ({ slug, content }: { slug: string; content: string }) =>
+      apiPut<TicketDetail>(`/repos/${repoId}/tickets/${slug}`, { content }),
+    onSuccess: (t) => {
+      queryClient.invalidateQueries({ queryKey: ['tickets', repoId] })
+      queryClient.invalidateQueries({ queryKey: ['ticket', repoId, t.slug] })
+    },
   })
 }
 

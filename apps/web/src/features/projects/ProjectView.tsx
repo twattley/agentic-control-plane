@@ -2,8 +2,80 @@ import type { ProviderSpec, Run, RunMode, Ticket } from '@agentic-control-plane/
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
-import { useCreateRun, useRepo, useRepoRuns, useTicket, useTickets } from '../../api/hooks'
+import {
+  useCreateRun, useCreateTicket, useRepo, useRepoRuns,
+  useTicket, useTickets, useUpdateTicket,
+} from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
+
+const TICKET_TEMPLATE = `# Title
+
+## Summary
+
+Two or three sentences written at freeze — enough for future-you to dive back in cold.
+
+## Done means
+
+- [ ] ...
+`
+
+function TicketComposer({ repoId, onDone }: { repoId: number; onDone: () => void }) {
+  const create = useCreateTicket(repoId)
+  const [slug, setSlug] = useState('')
+  const [content, setContent] = useState(TICKET_TEMPLATE)
+
+  const save = () => {
+    if (!slug) return
+    create.mutate({ slug, content }, { onSuccess: onDone })
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
+      <input className="w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm"
+        placeholder="ticket id, e.g. TR-1" value={slug}
+        onChange={(e) => setSlug(e.target.value.trim())} />
+      <textarea className="w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm"
+        rows={14} value={content} onChange={(e) => setContent(e.target.value)} />
+      <div className="flex gap-2">
+        <button type="button" onClick={save} disabled={create.isPending || !slug}
+          className="flex-1 rounded-lg bg-slate-900 py-2.5 font-medium text-white disabled:opacity-40">
+          {create.isPending ? 'saving…' : 'Save ticket'}
+        </button>
+        <button type="button" onClick={onDone}
+          className="rounded-lg border border-slate-300 px-4 text-sm text-slate-600">
+          Cancel
+        </button>
+      </div>
+      {create.error && <p className="text-sm text-red-600">{String(create.error)}</p>}
+    </div>
+  )
+}
+
+function TicketEditor({
+  repoId, slug, initial, onDone,
+}: { repoId: number; slug: string; initial: string; onDone: () => void }) {
+  const update = useUpdateTicket(repoId)
+  const [content, setContent] = useState(initial)
+
+  return (
+    <div className="space-y-2">
+      <textarea className="w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm"
+        rows={14} value={content} onChange={(e) => setContent(e.target.value)} />
+      <div className="flex gap-2">
+        <button type="button" disabled={update.isPending}
+          onClick={() => update.mutate({ slug, content }, { onSuccess: onDone })}
+          className="flex-1 rounded-lg bg-slate-900 py-2 font-medium text-white disabled:opacity-40">
+          {update.isPending ? 'saving…' : 'Save'}
+        </button>
+        <button type="button" onClick={onDone}
+          className="rounded-lg border border-slate-300 px-4 text-sm text-slate-600">
+          Cancel
+        </button>
+      </div>
+      {update.error && <p className="text-sm text-red-600">{String(update.error)}</p>}
+    </div>
+  )
+}
 
 // The agents on offer, as "provider[:model]" specs the worker expands into CLI
 // flags. Defaults: Sonnet builds, Codex reviews.
@@ -101,6 +173,7 @@ function ModeToggle({ mode, onChange }: { mode: RunMode; onChange: (m: RunMode) 
 
 function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; runs: Run[] }) {
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [mode, setMode] = useState<RunMode>('direct')
   const [builder, setBuilder] = useState<ProviderSpec>(DEFAULT_BUILDER)
   const [reviewer, setReviewer] = useState<ProviderSpec>(DEFAULT_REVIEWER)
@@ -129,11 +202,23 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
         {run ? <StateBadge state={run.state} /> : <span className="text-slate-400">{open ? '▾' : '▸'}</span>}
       </button>
 
-      {open && (
+      {open && editing && detail && (
+        <div className="space-y-3 border-t border-slate-100 px-4 py-3">
+          <TicketEditor repoId={repoId} slug={ticket.slug} initial={detail.content}
+            onDone={() => setEditing(false)} />
+        </div>
+      )}
+
+      {open && !editing && (
         <div className="space-y-3 border-t border-slate-100 px-4 py-3">
           <div className="prose prose-sm prose-slate max-w-none overflow-x-auto">
             <ReactMarkdown>{detail?.content ?? ''}</ReactMarkdown>
           </div>
+
+          <button type="button" onClick={() => setEditing(true)}
+            className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 active:bg-slate-50">
+            Edit ticket
+          </button>
 
           {run && (
             <Link to={`/runs/${run.id}`}
@@ -162,12 +247,21 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
 
 function TicketList({ repoId, runs }: { repoId: number; runs: Run[] }) {
   const { data: tickets } = useTickets(repoId)
-  if (!tickets?.length) return null
+  const [composing, setComposing] = useState(false)
 
   return (
     <section className="space-y-2">
-      <h2 className="text-lg font-semibold text-slate-800">Tickets</h2>
-      {tickets.map((t) => (
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-lg font-semibold text-slate-800">Tickets</h2>
+        {!composing && (
+          <button type="button" onClick={() => setComposing(true)}
+            className="text-sm font-medium text-blue-600">
+            + New ticket
+          </button>
+        )}
+      </div>
+      {composing && <TicketComposer repoId={repoId} onDone={() => setComposing(false)} />}
+      {tickets?.map((t) => (
         <TicketRow key={t.slug} repoId={repoId} ticket={t} runs={runs} />
       ))}
     </section>
