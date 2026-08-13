@@ -4,7 +4,8 @@ from tests.conftest import AUTH
 async def test_register_repo_returns_it(client):
     resp = await client.post(
         "/api/v1/repos",
-        json={"slug": "racing-platform", "name": "Racing Platform", "path": "/Users/tom/Projects/racing-platform"},
+        json={"slug": "racing-platform", "name": "Racing Platform",
+              "path": "/Users/tom/Projects/racing-platform"},
         headers=AUTH,
     )
     assert resp.status_code == 201

@@ -24,19 +24,9 @@ export interface Repo {
   slug: string
   name: string
   path: string
+  /** README first paragraph, derived at read time; null when there's no prose. */
+  description: string | null
   created_at: string
-}
-
-export interface RepoInput {
-  slug: string
-  name: string
-  path: string
-}
-
-export interface AvailableProject {
-  name: string
-  path: string
-  is_git: boolean
 }
 
 export type RunMode = 'direct' | 'tdd'

@@ -14,12 +14,6 @@ class Repo(BaseModel):
     slug: str
     name: str
     path: str
+    # Derived at read time from the checkout's README first paragraph — never stored.
+    description: str | None = None
     created_at: datetime
-
-
-class AvailableProject(BaseModel):
-    """A directory under the projects root that could be registered."""
-
-    name: str
-    path: str
-    is_git: bool

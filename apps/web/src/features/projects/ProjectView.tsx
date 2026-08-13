@@ -185,7 +185,6 @@ export function ProjectView() {
       <header className="space-y-1 pt-2">
         <Link to="/" className="text-sm text-slate-400">← projects</Link>
         <h1 className="text-2xl font-bold text-slate-900">{repo?.name ?? '…'}</h1>
-        <p className="truncate text-sm text-slate-500">{repo?.path}</p>
       </header>
 
       <TicketList repoId={repoId} runs={runs ?? []} />

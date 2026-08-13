@@ -1,10 +1,8 @@
 import type {
-  AvailableProject,
   DecisionInput,
   EventInput,
   QueueName,
   Repo,
-  RepoInput,
   Run,
   RunDetail,
   RunInput,
@@ -18,27 +16,17 @@ import { queryClient } from './queryClient'
 const QUEUES: QueueName[] = ['review', 'fix', 'human']
 
 export function useRepos() {
-  return useQuery({ queryKey: ['repos'], queryFn: () => apiFetch<Repo[]>('/repos') })
+  // Listing is also the sync: the API scans the Projects folder on every read,
+  // so a freshly-cloned repo appears within one refetch.
+  return useQuery({
+    queryKey: ['repos'],
+    queryFn: () => apiFetch<Repo[]>('/repos'),
+    refetchInterval: 15_000,
+  })
 }
 
 export function useRepo(id: number) {
   return useQuery({ queryKey: ['repo', id], queryFn: () => apiFetch<Repo>(`/repos/${id}`) })
-}
-
-export function useAvailableProjects() {
-  return useQuery({
-    queryKey: ['available-projects'],
-    queryFn: () => apiFetch<AvailableProject[]>('/repos/available'),
-    refetchInterval: 10_000, // self-heal if the API restarted after this tab loaded
-    retry: 3,
-  })
-}
-
-export function useRegisterRepo() {
-  return useMutation({
-    mutationFn: (body: RepoInput) => apiPost<Repo>('/repos', body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['repos'] }),
-  })
 }
 
 export function useTickets(repoId: number) {
