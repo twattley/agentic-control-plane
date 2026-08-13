@@ -1,3 +1,6 @@
+import asyncio
+from pathlib import Path
+
 import asyncpg
 import pytest_asyncio
 from app import database
@@ -10,6 +13,44 @@ AUTH = {"Authorization": f"Bearer {settings.auth_token}"}
 
 # Tests must never spawn real agent workers, whatever the live .env says.
 settings.dispatch_enabled = False
+
+
+def _to_test_url(url: str) -> str:
+    """Rewrite the configured database URL to its `<dbname>_test` sibling."""
+    base, _, query = url.partition("?")
+    head, _, dbname = base.rpartition("/")
+    if not dbname.endswith("_test"):
+        dbname += "_test"
+    return f"{head}/{dbname}" + (f"?{query}" if query else "")
+
+
+# The suite TRUNCATEs every table before each test, so it must never see the
+# live database: rewrite the URL to a dedicated *_test sibling and hard-stop
+# if that somehow didn't take.
+settings.database_url = _to_test_url(settings.database_url)
+assert settings.database_url.partition("?")[0].endswith("_test"), (
+    f"refusing to run destructive tests against {settings.database_url!r}"
+)
+
+_SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
+
+
+async def _provision_test_db() -> None:
+    """Create the test database if missing and (re)apply the idempotent schema."""
+    try:
+        conn = await asyncpg.connect(settings.database_url)
+    except asyncpg.InvalidCatalogNameError:
+        dbname = settings.database_url.partition("?")[0].rpartition("/")[2]
+        admin = await asyncpg.connect(settings.database_url.rpartition("/")[0] + "/postgres")
+        await admin.execute(f'CREATE DATABASE "{dbname}"')
+        await admin.close()
+        conn = await asyncpg.connect(settings.database_url)
+    for sql_file in sorted(_SCHEMA_DIR.glob("*.sql")):
+        await conn.execute(sql_file.read_text())
+    await conn.close()
+
+
+asyncio.run(_provision_test_db())
 
 _TABLES = ["decisions", "leases", "artifacts", "events", "runs", "repos"]
 
