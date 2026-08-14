@@ -139,6 +139,33 @@ export interface TicketUpdateInput {
   content: string
 }
 
+/** A ticket-shaping discussion — the strand that exists before a ticket is
+ * frozen. Mirrors Discussion. */
+export type DiscussionState = 'open' | 'frozen'
+
+export interface Discussion {
+  id: number
+  repo_id: number
+  session_id: string | null
+  state: DiscussionState
+  ticket_slug: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DiscussionMessage {
+  id: number
+  discussion_id: number
+  role: 'human' | 'agent'
+  content: string
+  created_at: string
+}
+
+export interface DiscussionDetail {
+  discussion: Discussion
+  messages: DiscussionMessage[]
+}
+
 /** One workbench pane: an active run plus everything needed to re-enter it
  * cold. Mirrors BoardPane. */
 export interface BoardPane {

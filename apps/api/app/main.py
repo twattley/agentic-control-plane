@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database import close_pool, get_pool
+from app.features.discussions.controller import router as discussions_router
 from app.features.repos.controller import router as repos_router
 from app.features.runs.controller import router as runs_router
 from app.features.tickets.controller import router as tickets_router
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(repos_router)
 app.include_router(runs_router)
 app.include_router(tickets_router)
+app.include_router(discussions_router)
 
 
 @app.exception_handler(RunNotFoundError)

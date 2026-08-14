@@ -7,6 +7,7 @@ import {
   useTicket, useTickets, useUpdateTicket,
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
+import { DiscussionPanel } from './DiscussionPanel'
 
 const TICKET_TEMPLATE = `# Title
 
@@ -248,18 +249,28 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
 function TicketList({ repoId, runs }: { repoId: number; runs: Run[] }) {
   const { data: tickets } = useTickets(repoId)
   const [composing, setComposing] = useState(false)
+  const [shaping, setShaping] = useState(false)
 
   return (
     <section className="space-y-2">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-800">Tickets</h2>
-        {!composing && (
-          <button type="button" onClick={() => setComposing(true)}
-            className="text-sm font-medium text-blue-600">
-            + New ticket
-          </button>
-        )}
+        <div className="flex gap-3">
+          {!shaping && (
+            <button type="button" onClick={() => setShaping(true)}
+              className="text-sm font-medium text-blue-600">
+              Shape an idea
+            </button>
+          )}
+          {!composing && (
+            <button type="button" onClick={() => setComposing(true)}
+              className="text-sm font-medium text-blue-600">
+              + New ticket
+            </button>
+          )}
+        </div>
       </div>
+      {shaping && <DiscussionPanel repoId={repoId} onClose={() => setShaping(false)} />}
       {composing && <TicketComposer repoId={repoId} onDone={() => setComposing(false)} />}
       {tickets?.map((t) => (
         <TicketRow key={t.slug} repoId={repoId} ticket={t} runs={runs} />

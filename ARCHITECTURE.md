@@ -29,6 +29,7 @@ results back. The dangerous surface stays in the agent's own permission model.
 | `artifacts` | Attached outputs: `diff`, `test_output`, `screenshot`, `log` |
 | `leases` | Role locks — at most one active (`released_at IS NULL`) lease per run+role |
 | `decisions` | Human decisions: `approve`, `request_changes`, `block`, `close` |
+| `discussions` + `discussion_messages` | Ticket-shaping chats (pre-freeze strands); `session_id` is the claude CLI conversation handle |
 
 Everything hangs off `runs` (FK, `ON DELETE CASCADE`). A run's history is
 reconstructable from its events; the `state` column is a materialised cursor.
@@ -72,8 +73,14 @@ work" creates a run with `ticket_id = <filename stem>`. Whenever a worker finds
 the file, not the run title, is the spec.
 
 **Ticket-writing is an interface with a freeze step**: discuss → freeze →
-build. Freezing writes a `## Summary` section — two or three sentences aimed
-at future-you re-entering cold (test scenarios follow it when they exist).
+build. The discussion happens in the UI ("Shape an idea"): each turn is a
+short-lived `claude -p --resume <session>` run **in the repo checkout** — the
+shaping agent reads real code but is read-only by construction (print mode
+denies write tools). Freeze asks it for the final markdown and the *plane*
+writes `tickets/<slug>.md` through the tickets feature, so `tickets/` stays
+the single write surface. Freezing writes a `## Summary` section — two or
+three sentences aimed at future-you re-entering cold (test scenarios follow
+it when they exist).
 That summary is the re-entry blurb the **workbench** shows: `GET /board`
 returns one pane per active run (run + repo name + frozen summary + last
 event), grouped by project on the home page, runs waiting on the human first.

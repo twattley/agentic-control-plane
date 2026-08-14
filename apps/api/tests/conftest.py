@@ -52,7 +52,8 @@ async def _provision_test_db() -> None:
 
 asyncio.run(_provision_test_db())
 
-_TABLES = ["decisions", "leases", "artifacts", "events", "runs", "repos"]
+_TABLES = ["discussion_messages", "discussions",
+           "decisions", "leases", "artifacts", "events", "runs", "repos"]
 
 
 @pytest_asyncio.fixture

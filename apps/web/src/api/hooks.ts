@@ -1,6 +1,8 @@
 import type {
   BoardPane,
   DecisionInput,
+  Discussion,
+  DiscussionDetail,
   EventInput,
   QueueName,
   Repo,
@@ -52,6 +54,53 @@ export function useTicket(repoId: number, slug: string | null) {
     queryKey: ['ticket', repoId, slug],
     queryFn: () => apiFetch<TicketDetail>(`/repos/${repoId}/tickets/${slug}`),
     enabled: slug !== null,
+  })
+}
+
+export function useDiscussions(repoId: number) {
+  return useQuery({
+    queryKey: ['discussions', repoId],
+    queryFn: () => apiFetch<Discussion[]>(`/repos/${repoId}/discussions`),
+  })
+}
+
+export function useDiscussion(repoId: number, id: number | null) {
+  return useQuery({
+    queryKey: ['discussion', repoId, id],
+    queryFn: () => apiFetch<DiscussionDetail>(`/repos/${repoId}/discussions/${id}`),
+    enabled: id !== null,
+  })
+}
+
+function cacheDiscussion(repoId: number, detail: DiscussionDetail) {
+  queryClient.setQueryData(['discussion', repoId, detail.discussion.id], detail)
+  queryClient.invalidateQueries({ queryKey: ['discussions', repoId] })
+}
+
+export function useStartDiscussion(repoId: number) {
+  return useMutation({
+    mutationFn: (message: string) =>
+      apiPost<DiscussionDetail>(`/repos/${repoId}/discussions`, { message }),
+    onSuccess: (d) => cacheDiscussion(repoId, d),
+  })
+}
+
+export function useSendDiscussionMessage(repoId: number) {
+  return useMutation({
+    mutationFn: ({ id, message }: { id: number; message: string }) =>
+      apiPost<DiscussionDetail>(`/repos/${repoId}/discussions/${id}/messages`, { message }),
+    onSuccess: (d) => cacheDiscussion(repoId, d),
+  })
+}
+
+export function useFreezeDiscussion(repoId: number) {
+  return useMutation({
+    mutationFn: ({ id, slug }: { id: number; slug: string }) =>
+      apiPost<TicketDetail>(`/repos/${repoId}/discussions/${id}/freeze`, { slug }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets', repoId] })
+      queryClient.invalidateQueries({ queryKey: ['discussions', repoId] })
+    },
   })
 }
 
