@@ -11,13 +11,24 @@ from pathlib import Path
 from app.features.tickets.models import Ticket, TicketDetail
 from app.services.markdown import first_prose_paragraph, section
 
+# Files in tickets/ that are reference material, not startable work: all-caps
+# single words (README, NOW — ticket ids like SBX-3 keep their dash/digits) and
+# these prefixes.
+_DOC_PREFIXES = ("handoff-", "plan-", "re-fresh-", "refresh-", "human-", "notes-")
+
+
+def _kind(stem: str) -> str:
+    if (stem.isalpha() and stem == stem.upper()) or stem.lower().startswith(_DOC_PREFIXES):
+        return "doc"
+    return "ticket"
+
 
 def list_tickets(repo_path: str) -> list[Ticket]:
     folder = Path(repo_path) / "tickets"
     if not folder.is_dir():
         return []
     return [
-        Ticket(slug=p.stem, title=_title(p), summary=ticket_summary(p))
+        Ticket(slug=p.stem, title=_title(p), kind=_kind(p.stem), summary=ticket_summary(p))
         for p in sorted(folder.glob("*.md"))
     ]
 

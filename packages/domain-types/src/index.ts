@@ -121,6 +121,9 @@ export interface RunDetail {
 export interface Ticket {
   slug: string
   title: string
+  /** 'ticket' = startable work; 'doc' = reference material (handoffs, plans,
+   * READMEs) shown collapsed. */
+  kind: 'ticket' | 'doc'
   /** Re-entry blurb: the `## Summary` section written at ticket freeze,
    * else the first prose paragraph. */
   summary: string | null

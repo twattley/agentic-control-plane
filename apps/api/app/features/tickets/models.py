@@ -4,6 +4,9 @@ from pydantic import BaseModel, Field
 class Ticket(BaseModel):
     slug: str          # filename without .md — doubles as the run's ticket_id
     title: str         # first `# ` heading, falling back to the slug
+    # 'ticket' = startable work; 'doc' = reference material living in the same
+    # folder (handoffs, plans, READMEs) that shouldn't compete for attention.
+    kind: str = "ticket"
     # The re-entry blurb: the `## Summary` section written when the ticket was
     # frozen, falling back to the first prose paragraph. None for a bare file.
     summary: str | None = None

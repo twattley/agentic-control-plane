@@ -33,6 +33,24 @@ async def test_list_tickets_returns_md_files_with_titles(client, tmp_path):
     assert by_slug["ACP-10"]["title"] == "ACP-10"  # no heading -> slug
 
 
+async def test_docs_are_classified_apart_from_tickets(client, tmp_path):
+    tickets = tmp_path / "tickets"
+    tickets.mkdir()
+    for name in ["README.md", "NOW.md", "handoff-backfill.md", "plan-ingestion.md",
+                 "re-fresh-backfill.md", "human-checks.md"]:
+        (tickets / name).write_text(f"# {name}\n")
+    (tickets / "T-1.md").write_text("# A real ticket\n")
+
+    repo_id = await _register(client, str(tmp_path))
+    body = (await client.get(f"/api/v1/repos/{repo_id}/tickets", headers=AUTH)).json()
+
+    kinds = {t["slug"]: t["kind"] for t in body}
+    assert kinds["T-1"] == "ticket"
+    for doc in ["README", "NOW", "handoff-backfill", "plan-ingestion",
+                "re-fresh-backfill", "human-checks"]:
+        assert kinds[doc] == "doc", doc
+
+
 async def test_ticket_summary_prefers_the_summary_section(client, tmp_path):
     tickets = tmp_path / "tickets"
     tickets.mkdir()

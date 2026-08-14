@@ -196,10 +196,7 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
     <div className="rounded-lg border border-slate-200 bg-white">
       <button type="button" onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-slate-50">
-        <div className="min-w-0">
-          <div className="truncate font-medium text-slate-900">{ticket.title}</div>
-          <div className="text-sm text-slate-500">tickets/{ticket.slug}.md</div>
-        </div>
+        <div className="truncate font-medium text-slate-900">{ticket.title}</div>
         {run ? <StateBadge state={run.state} /> : <span className="text-slate-400">{open ? '▾' : '▸'}</span>}
       </button>
 
@@ -228,7 +225,7 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
             </Link>
           )}
 
-          {!active && (
+          {!active && ticket.kind === 'ticket' && (
             <>
               <ModeToggle mode={mode} onChange={setMode} />
               <AgentPicker builder={builder} reviewer={reviewer}
@@ -272,10 +269,32 @@ function TicketList({ repoId, runs }: { repoId: number; runs: Run[] }) {
       </div>
       {shaping && <DiscussionPanel repoId={repoId} onClose={() => setShaping(false)} />}
       {composing && <TicketComposer repoId={repoId} onDone={() => setComposing(false)} />}
-      {tickets?.map((t) => (
+      {tickets?.filter((t) => t.kind === 'ticket').map((t) => (
         <TicketRow key={t.slug} repoId={repoId} ticket={t} runs={runs} />
       ))}
+      <DocsSection repoId={repoId} docs={tickets?.filter((t) => t.kind === 'doc') ?? []}
+        runs={runs} />
     </section>
+  )
+}
+
+function DocsSection({ repoId, docs, runs }: { repoId: number; docs: Ticket[]; runs: Run[] }) {
+  const [open, setOpen] = useState(false)
+  if (!docs.length) return null
+  return (
+    <div className="pt-1">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="text-sm font-medium text-slate-400">
+        {open ? '▾' : '▸'} Reference docs ({docs.length})
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {docs.map((t) => (
+            <TicketRow key={t.slug} repoId={repoId} ticket={t} runs={runs} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
