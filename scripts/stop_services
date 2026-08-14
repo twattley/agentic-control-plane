@@ -1,0 +1,30 @@
+#!/bin/zsh
+
+# agentic-control-plane — stop the tmux service sessions.
+# In-flight agent workers are NOT killed: they run detached from the API
+# process on purpose (start_new_session=True) and finish on their own.
+
+set -e
+
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+TMUX="$(command -v tmux)"
+
+echo "Stopping agentic-control-plane services at $(date)"
+
+stop_service() {
+    local session_name="$1"
+    if $TMUX has-session -t "$session_name" 2>/dev/null; then
+        echo "🛑 Stopping $session_name..."
+        $TMUX kill-session -t "$session_name"
+        echo "✓ $session_name stopped"
+    else
+        echo "- $session_name not running"
+    fi
+}
+
+stop_service "acp-api"
+stop_service "acp-web"
+
+echo ""
+echo "Done."

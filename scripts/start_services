@@ -1,0 +1,43 @@
+#!/bin/zsh
+
+# agentic-control-plane — start all services in detached tmux sessions.
+# Idempotent: a session that already exists is left alone.
+
+set -e
+
+# PATH for cron/launchd environments
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TMUX="$(command -v tmux)"
+
+echo "Starting agentic-control-plane services at $(date)"
+
+session_exists() {
+    $TMUX has-session -t "$1" 2>/dev/null
+}
+
+start_service() {
+    local session_name="$1"
+    local script_path="$2"
+
+    if session_exists "$session_name"; then
+        echo "✓ $session_name session already exists, skipping..."
+        return 0
+    fi
+
+    echo "🚀 Starting $session_name..."
+    $TMUX new-session -d -s "$session_name" -c "$PROJECT_ROOT"
+    $TMUX send-keys -t "$session_name" "$script_path" Enter
+    echo "✓ $session_name started in tmux session"
+}
+
+start_service "acp-api" "./scripts/start_api"
+start_service "acp-web" "./scripts/start_web"
+
+echo ""
+echo "🎉 All services started."
+echo ""
+echo "Sessions:  acp-api (API :8400), acp-web (UI :5400)"
+echo "Attach:    tmux attach-session -t acp-api"
+echo "Status:    ./scripts/status_all"

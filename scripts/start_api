@@ -1,0 +1,13 @@
+#!/bin/zsh
+
+# Start the agentic-control-plane FastAPI backend (port 8400).
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "🚀 Starting control plane API..."
+echo "API: http://localhost:8400/api/v1/health"
+echo ""
+
+make serve

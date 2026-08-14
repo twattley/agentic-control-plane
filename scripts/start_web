@@ -1,0 +1,13 @@
+#!/bin/zsh
+
+# Start the agentic-control-plane web UI (Vite dev server, port 5400).
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "🚀 Starting control plane web UI..."
+echo "Web: http://localhost:5400"
+echo ""
+
+make web
