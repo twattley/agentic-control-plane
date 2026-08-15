@@ -9,7 +9,6 @@ import type {
   WorkflowStory,
 } from '@agentic-control-plane/domain-types'
 import { useState } from 'react'
-import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import {
   useAdoptLegacy, useCreateRun, useCreateStory, useCreateTicket, useMarkStoryReady,
@@ -18,6 +17,7 @@ import {
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
+import { DocumentBody } from './DocumentBody'
 
 const TICKET_TEMPLATE = `# Title
 
@@ -219,9 +219,7 @@ function TicketRow({ repoId, ticket, runs }: { repoId: number; ticket: Ticket; r
 
       {open && !editing && (
         <div className="space-y-3 border-t border-slate-100 px-4 py-3">
-          <div className="prose prose-sm prose-slate max-w-none overflow-x-auto">
-            <ReactMarkdown>{detail?.content ?? ''}</ReactMarkdown>
-          </div>
+          <DocumentBody content={detail?.content ?? ''} />
 
           <button type="button" onClick={() => setEditing(true)}
             className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 active:bg-slate-50">
@@ -462,9 +460,7 @@ function WorkflowWorkRow({
       {open && (
         <div className="space-y-3 border-t border-slate-100 px-4 py-3">
           {documentError && <p className="text-sm text-red-600">{String(documentError)}</p>}
-          <div className="prose prose-sm prose-slate max-w-none overflow-x-auto">
-            <ReactMarkdown>{document?.content ?? ''}</ReactMarkdown>
-          </div>
+          <DocumentBody content={document?.content ?? ''} />
           {item.kind === 'story' && item.diagnostic_codes.length > 0 && (
             <p className="text-sm text-amber-700">
               not startable · {item.diagnostic_codes.map(plainDiagnostic).join(', ')}
