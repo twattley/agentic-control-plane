@@ -71,6 +71,35 @@ def load_workflow(repo_path: str) -> WorkflowProjection:
     )
 
 
+def get_document_by_path(repo_path: str, locator: str) -> WorkflowDocument:
+    """Read one work document by its current path. Nested legacy files can share
+    a filename stem, so a path — not an identity — is what reliably names a file
+    on screen. Identity stays the run-level concept."""
+    root = Path(repo_path).resolve()
+    path = _safe_ticket_path(root, locator)
+    workflow = load_workflow(repo_path)
+
+    for item in workflow.stories:
+        if item.path == locator:
+            return _document(item.story_id, "story", locator, item.title, path)
+    for item in workflow.epics:
+        if item.path == locator:
+            return _document(item.epic_id, "epic", locator, item.title, path)
+    for item in workflow.legacy:
+        if item.path == locator:
+            return _document(item.legacy_id, "legacy", locator, item.title, path)
+    raise WorkflowDocumentError(f"{locator!r} is not in this repo's workflow")
+
+
+def _document(
+    identity: str, kind: str, locator: str, title: str, path: Path
+) -> WorkflowDocument:
+    return WorkflowDocument(
+        identity=identity, kind=kind, path=locator, title=title,  # type: ignore[arg-type]
+        summary=ticket_summary(path), content=path.read_text(),
+    )
+
+
 def get_document(repo_path: str, identity: str) -> WorkflowDocument:
     workflow = load_workflow(repo_path)
     return document_from_workflow(repo_path, workflow, identity)

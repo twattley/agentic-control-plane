@@ -36,6 +36,19 @@ async def get_workflow(repo_id: int) -> WorkflowProjection:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.get("/document")
+async def get_workflow_document_by_path(repo_id: int, path: str) -> WorkflowDocument:
+    """Read a work document by its current path — the only way to name one of
+    several nested legacy files that share a filename stem."""
+    repo = await _repo_or_404(repo_id)
+    try:
+        return repository.get_document_by_path(repo.path, path)
+    except repository.WorkflowReadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except repository.WorkflowDocumentError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/documents/{identity}")
 async def get_workflow_document(repo_id: int, identity: str) -> WorkflowDocument:
     repo = await _repo_or_404(repo_id)

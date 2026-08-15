@@ -14,7 +14,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   useAdoptLegacy, useCreateRun, useCreateStory, useCreateTicket, useMarkStoryReady,
   useRepo, useRepoRuns, useTicket, useTickets, useUpdateTicket, useWorkflow,
-  useWorkflowDocument,
+  useWorkflowDocumentByPath,
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
@@ -413,19 +413,24 @@ function WorkflowWorkRow({
   const [reviewer, setReviewer] = useState<ProviderSpec>(DEFAULT_REVIEWER)
   const create = useCreateRun(repoId)
   const markReady = useMarkStoryReady(repoId)
-  const { data: document, error: documentError } = useWorkflowDocument(
-    repoId, open ? identity : null,
+  const { data: document, error: documentError } = useWorkflowDocumentByPath(
+    repoId, open ? item.path : null,
   )
   const matchingRuns = runs.filter((run) => run.ticket_id === identity)
   const currentRun = matchingRuns.find((run) => !['closed', 'blocked'].includes(run.state))
     ?? matchingRuns[0]
   const active = currentRun && !['closed', 'blocked'].includes(currentRun.state)
+  // A run is keyed by identity, so a stem shared by several nested files can't
+  // start one — the worker would not know which file is the spec.
+  const shareCount = item.kind === 'legacy'
+    ? workflow.legacy.filter((other) => other.legacy_id === identity).length
+    : 1
   const storyReady = item.kind === 'story'
     && item.state === 'ready'
     && item.claimable_roles.includes('builder')
     && item.diagnostic_codes.length === 0
   const legacyReady = item.kind === 'legacy' && workflow.ticket_contract === null
-  const documentReady = document?.identity === identity && document.kind === item.kind
+  const documentReady = document?.path === item.path && shareCount === 1
   const startable = (storyReady || legacyReady) && documentReady && !active
 
   const start = () => create.mutate({
@@ -462,7 +467,13 @@ function WorkflowWorkRow({
           </div>
           {item.kind === 'story' && item.diagnostic_codes.length > 0 && (
             <p className="text-sm text-amber-700">
-              unavailable · {item.diagnostic_codes.join(', ')}
+              not startable · {item.diagnostic_codes.map(plainDiagnostic).join(', ')}
+            </p>
+          )}
+          {shareCount > 1 && (
+            <p className="text-sm text-amber-700">
+              {shareCount} files are named <code>{identity}</code>, so a run can't tell
+              them apart — adopt this one as a story to give it its own identity.
             </p>
           )}
           {currentRun && (

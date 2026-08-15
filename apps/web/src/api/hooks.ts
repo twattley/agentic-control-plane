@@ -71,6 +71,18 @@ export function useWorkflow(repoId: number) {
   })
 }
 
+/** Read a work document by its current path — nested legacy files can share a
+ * filename stem, so identity cannot name them. */
+export function useWorkflowDocumentByPath(repoId: number, path: string | null) {
+  return useQuery({
+    queryKey: ['workflow-document-path', repoId, path],
+    queryFn: () => apiFetch<WorkflowDocument>(
+      `/repos/${repoId}/workflow/document?path=${encodeURIComponent(path ?? '')}`,
+    ),
+    enabled: path !== null,
+  })
+}
+
 export function useWorkflowDocument(repoId: number, identity: string | null) {
   return useQuery({
     queryKey: ['workflow-document', repoId, identity],
