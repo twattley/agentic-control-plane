@@ -1,0 +1,115 @@
+{
+  "abandoned_at": null,
+  "agent": "codex",
+  "brief": {
+    "changed_files": [
+      "ARCHITECTURE.md",
+      "apps/api/app/features/workflow/__init__.py",
+      "apps/api/app/features/workflow/controller.py",
+      "apps/api/app/features/workflow/models.py",
+      "apps/api/app/features/workflow/repository.py",
+      "apps/api/app/main.py",
+      "apps/api/app/services/runs_service.py",
+      "apps/api/app/worker.py",
+      "apps/api/tests/features/workflow/__init__.py",
+      "apps/api/tests/features/workflow/test_workflow_api.py",
+      "apps/api/tests/features/runs/test_board.py",
+      "apps/api/tests/features/runs/test_task_spec.py",
+      "apps/web/src/api/hooks.ts",
+      "apps/web/src/features/projects/ProjectView.tsx",
+      "packages/domain-types/src/index.ts",
+      "tickets/in-progress/009-consume-agent-workflow-snapshot.md"
+    ],
+    "focus_areas": [
+      "Run creation now resolves exactly one safe readable story document before inserting a Control Plane run; missing, escaping, and duplicate locators return 409 and create nothing.",
+      "Worker prompt resolution no longer swallows present-adapter failures and now runs before the lease claim, so an unsafe or ambiguous locator raises visibly while the run remains queued and unclaimed.",
+      "The project UI offers Start only after the same identity and kind have loaded successfully through the document endpoint.",
+      "Snapshot v1 Pydantic boundaries use strict validation, and a string supplied for an integer progress field is rejected as an explicit 502 upstream error rather than coerced.",
+      "Reviewer regressions cover missing, escaping, and duplicate start locators; missing and duplicate prompt locators; worker inertness; and wrong-type snapshot records."
+    ],
+    "goal": "Address ticket 009 reviewer findings by making unsafe workflow documents inert, surfacing prompt resolution failures before claim, and enforcing strict snapshot v1 field types.",
+    "risks": [
+      "Ticket 009 cannot satisfy its literal repository-wide Ruff Done When until the pre-existing baseline is fixed in a separate scoped ticket or validation is explicitly amended by the human.",
+      "No live human visual pass was performed; the UI consistency change is covered by the successful TypeScript production build and server-side startability enforcement."
+    ],
+    "table_status": {
+      "cases_table_unchanged": true,
+      "gaps": [],
+      "rows_green": "20/20"
+    },
+    "test_output": "50 focused ticket tests passed; full make test passed 102 tests; changed ticket Python paths pass Ruff; production web build passed; git diff --check passed; manual scope audit passed with all implementation/test changes inside allowed_paths and no forbidden path edits. The specified repository-wide Ruff command remains red on the same 19 pre-existing issues in unchanged out-of-scope files: one import-order issue in apps/api/tests/conftest.py and 18 line-length issues in apps/api/tests/features/runs/test_dispatch.py and test_run_lifecycle.py."
+  },
+  "claimed_at": "2026-08-15T07:59:46.663993+00:00",
+  "completed_at": "2026-08-15T08:05:13.618649+00:00",
+  "created_at": "2026-08-15T05:22:35.011790+00:00",
+  "findings": {
+    "issues": [
+      {
+        "file": "apps/api/app/services/runs_service.py",
+        "severity": "high",
+        "summary": "A ready story with a missing, escaping, or duplicate Control Plane locator remains startable because create_run validates only state, claimable_roles, and diagnostic_codes. ProjectView mirrors that incomplete check, and apps/api/app/worker.py catches WorkflowDocumentError and silently returns an empty spec note. The result is a 201 run that can dispatch an agent with only the title after document/prompt resolution failed. This violates the unsafe-work-inert scenario and the duplicate/unsafe-locator case requiring prompt refusal to surface the problem. Gate run creation on one safe current document and make dispatch surface resolution failure; add negative API and prompt tests."
+      },
+      {
+        "file": "apps/api/app/features/workflow/models.py",
+        "severity": "medium",
+        "summary": "The snapshot models are not strict, so structurally invalid v1 records can be accepted and rewritten instead of producing the required explicit upstream error. A direct probe with story_counts.ready set to the JSON string 1 validated successfully and returned integer 1. The invalid-output case currently tests only malformed JSON, another version, and missing fields. Make the v1 boundary strict and add wrong-type record cases so the adapter does not coerce upstream data."
+      },
+      {
+        "file": "tickets/in-progress/009-consume-agent-workflow-snapshot.md",
+        "severity": "medium",
+        "summary": "The required repository-wide Ruff command is red with 19 errors, so the ticket Done When and close gate are not satisfied. Review confirmed every failure is pre-existing in unchanged apps/api/tests/conftest.py, test_dispatch.py, and test_run_lifecycle.py, while all ticket 009 Python paths are clean. Those files are outside allowed_paths, so resolve the baseline in a prerequisite or explicitly rescope/amend validation before close rather than changing them under ticket 009."
+      }
+    ],
+    "suggestions": [
+      "The ticket and new workflow test are untracked, so the claimed unchanged 20-row cases table has no committed RED baseline for the reviewer to diff. Preserve a committed contract baseline for future builder passes.",
+      "The 190-line project-view change builds successfully but has no browser-level test or live visual evidence. Include a focused human visual pass before close."
+    ],
+    "verdict": "needs-work"
+  },
+  "git_ref": "main@3bb95dd",
+  "history": [
+    {
+      "agent": "codex",
+      "at": "2026-08-15T05:22:35.025589+00:00",
+      "event": "claimed",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T06:46:50.798347+00:00",
+      "event": "posted",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T07:52:23.779635+00:00",
+      "event": "claimed",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T07:57:43.487207+00:00",
+      "event": "posted",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T07:59:46.664093+00:00",
+      "event": "claimed",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T08:05:13.618748+00:00",
+      "event": "posted",
+      "role": "builder"
+    }
+  ],
+  "id": "cc0414c228557051",
+  "independent_review": null,
+  "project_slug": "agentic-control-plane",
+  "role": "builder",
+  "status": "complete",
+  "ticket_path": "tickets/in-progress/009-consume-agent-workflow-snapshot.md",
+  "work_unit_id": "009-consume-agent-workflow-snapshot"
+}

@@ -6,8 +6,6 @@ Every state-changing operation computes the legal target state *before* writing,
 so an illegal request touches no rows.
 """
 
-from pathlib import Path
-
 import asyncpg
 
 from app.config import ROLE_FOR_STATE
@@ -25,7 +23,7 @@ from app.features.runs.models import (
     RunDetail,
     RunIn,
 )
-from app.features.tickets.repository import ticket_summary
+from app.features.workflow import repository as workflow_repo
 from app.services import executor, state_machine
 from app.services.state_machine import IllegalTransitionError
 
@@ -40,6 +38,10 @@ class LeaseConflictError(Exception):
     """Role already actively leased on this run."""
 
 
+class WorkUnitNotStartableError(Exception):
+    """The portable workflow does not expose this identity as startable."""
+
+
 async def _load(conn: asyncpg.Connection, run_id: int) -> Run:
     run = await repo.get_run(conn, run_id)
     if run is None:
@@ -48,7 +50,47 @@ async def _load(conn: asyncpg.Connection, run_id: int) -> Run:
 
 
 async def create_run(pool: asyncpg.Pool, data: RunIn) -> Run:
+    repo_row = await repos_repo.get_repo(pool, data.repo_id)
+    if repo_row is None:
+        raise WorkUnitNotStartableError(f"repo {data.repo_id} not found")
+    workflow = workflow_repo.load_workflow(repo_row.path)
+
     async with pool.acquire() as conn, conn.transaction():
+        if workflow.ticket_contract == "epic-story-v1":
+            story = next(
+                (item for item in workflow.stories if item.story_id == data.ticket_id),
+                None,
+            )
+            if (
+                story is None
+                or story.state != "ready"
+                or "builder" not in story.claimable_roles
+                or story.diagnostic_codes
+            ):
+                raise WorkUnitNotStartableError(
+                    f"workflow identity {data.ticket_id!r} is not a startable story"
+                )
+            try:
+                document = workflow_repo.document_from_workflow(
+                    repo_row.path, workflow, data.ticket_id
+                )
+            except workflow_repo.WorkflowDocumentError as exc:
+                raise WorkUnitNotStartableError(
+                    f"workflow identity {data.ticket_id!r} has no safe unique document"
+                ) from exc
+            if document.kind != "story":
+                raise WorkUnitNotStartableError(
+                    f"workflow identity {data.ticket_id!r} is not a story document"
+                )
+            existing = await repo.list_runs(conn, data.repo_id)
+            if any(
+                run.ticket_id == data.ticket_id
+                and run.state not in {"closed", "blocked"}
+                for run in existing
+            ):
+                raise WorkUnitNotStartableError(
+                    f"workflow identity {data.ticket_id!r} already has an active run"
+                )
         run = await repo.create_run(conn, data)
         await repo.append_event(conn, run.id, EventIn(type="run_created", actor="system"))
     executor.maybe_dispatch(run, run.state)  # a new run is queued -> builder
@@ -164,16 +206,27 @@ async def board(pool: asyncpg.Pool) -> list[BoardPane]:
     async with pool.acquire() as conn:
         runs = await repo.runs_in_states(conn, _ACTIVE_STATES)
         panes = []
+        repos = {}
+        workflows = {}
         for run in sorted(runs, key=lambda r: r.updated_at, reverse=True):
-            repo_row = await repos_repo.get_repo(pool, run.repo_id)
+            if run.repo_id not in repos:
+                repos[run.repo_id] = await repos_repo.get_repo(pool, run.repo_id)
+            repo_row = repos[run.repo_id]
             if repo_row is None:
                 continue
+            if run.repo_id not in workflows:
+                workflows[run.repo_id] = workflow_repo.load_workflow(repo_row.path)
             events = await repo.list_events(conn, run.id)
-            ticket_file = Path(repo_row.path) / "tickets" / f"{run.ticket_id}.md"
+            try:
+                document = workflow_repo.document_from_workflow(
+                    repo_row.path, workflows[run.repo_id], run.ticket_id
+                )
+            except workflow_repo.WorkflowDocumentError:
+                document = None
             panes.append(BoardPane(
                 run=run,
                 repo_name=repo_row.name,
-                summary=ticket_summary(ticket_file) if ticket_file.is_file() else None,
+                summary=document.summary if document else None,
                 last_event=events[-1] if events else None,
             ))
         return panes

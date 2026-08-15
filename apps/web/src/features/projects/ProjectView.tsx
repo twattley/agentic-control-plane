@@ -1,10 +1,18 @@
-import type { ProviderSpec, Run, RunMode, Ticket } from '@agentic-control-plane/domain-types'
+import type {
+  ProviderSpec,
+  Run,
+  RunMode,
+  Ticket,
+  WorkflowLegacy,
+  WorkflowProjection,
+  WorkflowStory,
+} from '@agentic-control-plane/domain-types'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import {
   useCreateRun, useCreateTicket, useRepo, useRepoRuns,
-  useTicket, useTickets, useUpdateTicket,
+  useTicket, useTickets, useUpdateTicket, useWorkflow, useWorkflowDocument,
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
@@ -298,11 +306,184 @@ function DocsSection({ repoId, docs, runs }: { repoId: number; docs: Ticket[]; r
   )
 }
 
+function WorkflowWorkRow({
+  repoId, item, workflow, runs,
+}: {
+  repoId: number
+  item: WorkflowStory | WorkflowLegacy
+  workflow: WorkflowProjection
+  runs: Run[]
+}) {
+  const identity = item.kind === 'story' ? item.story_id : item.legacy_id
+  const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<RunMode>('direct')
+  const [builder, setBuilder] = useState<ProviderSpec>(DEFAULT_BUILDER)
+  const [reviewer, setReviewer] = useState<ProviderSpec>(DEFAULT_REVIEWER)
+  const create = useCreateRun(repoId)
+  const { data: document, error: documentError } = useWorkflowDocument(
+    repoId, open ? identity : null,
+  )
+  const matchingRuns = runs.filter((run) => run.ticket_id === identity)
+  const currentRun = matchingRuns.find((run) => !['closed', 'blocked'].includes(run.state))
+    ?? matchingRuns[0]
+  const active = currentRun && !['closed', 'blocked'].includes(currentRun.state)
+  const storyReady = item.kind === 'story'
+    && item.state === 'ready'
+    && item.claimable_roles.includes('builder')
+    && item.diagnostic_codes.length === 0
+  const legacyReady = item.kind === 'legacy' && workflow.ticket_contract === null
+  const documentReady = document?.identity === identity && document.kind === item.kind
+  const startable = (storyReady || legacyReady) && documentReady && !active
+
+  const start = () => create.mutate({
+    repo_id: repoId,
+    ticket_id: identity,
+    title: item.title,
+    mode,
+    builder_provider: builder,
+    reviewer_provider: reviewer,
+  })
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-slate-50">
+        <div className="min-w-0">
+          <div className="truncate font-medium text-slate-900">{item.title}</div>
+          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+            <span>{identity}</span>
+            {item.state && <span>state · {item.state}</span>}
+            {item.kind === 'story' && <span>coordination · {item.coordination_class}</span>}
+          </div>
+        </div>
+        {currentRun
+          ? <StateBadge state={currentRun.state} />
+          : <span className="text-slate-400">{open ? '▾' : '▸'}</span>}
+      </button>
+
+      {open && (
+        <div className="space-y-3 border-t border-slate-100 px-4 py-3">
+          {documentError && <p className="text-sm text-red-600">{String(documentError)}</p>}
+          <div className="prose prose-sm prose-slate max-w-none overflow-x-auto">
+            <ReactMarkdown>{document?.content ?? ''}</ReactMarkdown>
+          </div>
+          {item.kind === 'story' && item.diagnostic_codes.length > 0 && (
+            <p className="text-sm text-amber-700">
+              unavailable · {item.diagnostic_codes.join(', ')}
+            </p>
+          )}
+          {currentRun && (
+            <Link to={`/runs/${currentRun.id}`}
+              className="block rounded-lg border border-slate-200 px-4 py-2 text-center text-sm font-medium text-slate-700">
+              Control Plane run · {currentRun.state}
+            </Link>
+          )}
+          {startable && (
+            <>
+              <ModeToggle mode={mode} onChange={setMode} />
+              <AgentPicker builder={builder} reviewer={reviewer}
+                onBuilder={setBuilder} onReviewer={setReviewer} />
+              <button type="button" onClick={start} disabled={create.isPending}
+                className="w-full rounded-lg bg-blue-600 py-2.5 font-medium text-white disabled:opacity-40">
+                {create.isPending ? 'starting…' : 'Start work'}
+              </button>
+            </>
+          )}
+          {create.error && <p className="text-sm text-red-600">{String(create.error)}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WorkflowProject({
+  repoId, workflow, runs,
+}: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
+  const knownEpicIds = new Set(workflow.epics.map((epic) => epic.epic_id))
+  const ungrouped = workflow.stories.filter((story) => !knownEpicIds.has(story.epic_id))
+
+  return (
+    <section className="space-y-4">
+      {workflow.diagnostics.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <h2 className="font-semibold text-amber-900">Workflow diagnostics</h2>
+          {workflow.diagnostics.map((diagnostic, index) => (
+            <p key={`${diagnostic.code}-${diagnostic.path}-${index}`} className="text-sm text-amber-800">
+              {diagnostic.source} · {diagnostic.code} · {diagnostic.message}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold text-slate-800">Epics</h2>
+        {workflow.epics.map((epic) => {
+          const stories = workflow.stories.filter((story) => story.epic_id === epic.epic_id)
+          return (
+            <div key={epic.epic_id} className="space-y-2 rounded-xl border border-slate-300 bg-slate-50 p-3">
+              <div className="flex items-baseline justify-between gap-3 px-1">
+                <div>
+                  <h3 className="font-semibold text-slate-900">{epic.title}</h3>
+                  <p className="text-xs text-slate-500">{epic.epic_id} · outcome, not startable</p>
+                </div>
+                <span className="text-xs text-slate-500">
+                  {epic.story_counts.complete ?? 0}/{epic.story_counts.total ?? 0} complete
+                </span>
+              </div>
+              {!stories.length && <p className="px-1 text-sm text-slate-400">no stories yet</p>}
+              {stories.map((story) => (
+                <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
+                  workflow={workflow} runs={runs} />
+              ))}
+            </div>
+          )
+        })}
+      </div>
+
+      {ungrouped.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-slate-800">Ungrouped stories</h2>
+          {ungrouped.map((story) => (
+            <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
+              workflow={workflow} runs={runs} />
+          ))}
+        </div>
+      )}
+
+      {workflow.legacy.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
+          {workflow.legacy.map((item) => (
+            <WorkflowWorkRow key={item.legacy_id} repoId={repoId} item={item}
+              workflow={workflow} runs={runs} />
+          ))}
+        </div>
+      )}
+
+      {workflow.runs.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-slate-800">Portable handoffs</h2>
+          {workflow.runs.map((run) => (
+            <div key={run.id} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div className="font-medium text-slate-900">{run.work_unit_id}</div>
+              <div className="text-sm text-slate-500">
+                portable handoff · {run.role} · {run.status}
+                {run.ticket_kind === null && ' · orphan'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function ProjectView() {
   const { id } = useParams()
   const repoId = Number(id)
   const { data: repo } = useRepo(repoId)
   const { data: runs } = useRepoRuns(repoId)
+  const { data: workflow, error: workflowError } = useWorkflow(repoId)
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4">
@@ -311,9 +492,15 @@ export function ProjectView() {
         <h1 className="text-2xl font-bold text-slate-900">{repo?.name ?? '…'}</h1>
       </header>
 
-      <TicketList repoId={repoId} runs={runs ?? []} />
+      {workflowError && <p className="text-sm text-red-600">{String(workflowError)}</p>}
+      {workflow?.source === 'legacy-flat' && <TicketList repoId={repoId} runs={runs ?? []} />}
+      {workflow?.source === 'agent-workflow-snapshot-v1' && (
+        <WorkflowProject repoId={repoId} workflow={workflow} runs={runs ?? []} />
+      )}
 
-      <NewFeatureForm repoId={repoId} />
+      {workflow && workflow.ticket_contract !== 'epic-story-v1' && (
+        <NewFeatureForm repoId={repoId} />
+      )}
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold text-slate-800">Features</h2>

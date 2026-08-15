@@ -13,11 +13,12 @@ packages/     domain-types — shared TypeScript types
 
 ## What this is (and isn't)
 
-A **control plane, not an executor.** It owns workflow state, role locks,
-an append-only event log, artifacts, and human approvals. It never runs shell,
-touches a repo, or edits code. Local workers (a later slice) poll it, claim a
-run, invoke `codex exec` / `claude -p` inside their own checkout, and post
-results back. The dangerous surface stays in the agent's own permission model.
+A **control plane with local workers, not a hosted execution service.** It owns
+workflow state, role locks, an append-only event log, artifacts, and human
+approvals. In this personally owned, trusted-checkout deployment, workers invoke
+`codex exec` / `claude -p` in registered repositories and the workflow reader
+runs the fixed `scripts/agent_workflow snapshot` argv without a shell and with a
+bounded timeout. Registered checkout paths are therefore a trust boundary.
 
 ## Data model
 
@@ -63,14 +64,29 @@ releases the acting role's lease (builder hands off at `brief`, reviewer at
 The **phone inbox** is three queue reads: `/queue/review`, `/queue/fix`,
 `/queue/human` — "runs waiting on the reviewer / builder / you".
 
-## Tickets
+## Portable workflow and tickets
+
+When a registered checkout has `scripts/agent_workflow`,
+`GET /repos/:id/workflow` consumes exact `agent-workflow-snapshot-v1`. The
+projection keeps epic, story, legacy, portable-run, and diagnostic records
+separate. Story and legacy identities are stable; Markdown paths are current
+locators. `GET /repos/:id/workflow/documents/:identity` resolves that locator
+below the checkout's `tickets/` root and refuses missing, escaping, or ambiguous
+paths. A present but invalid adapter fails explicitly. Only a missing adapter
+uses the existing top-level flat-ticket reader.
+
+The project view uses the snapshot for epic progress, story state and
+coordination class, legacy work, portable handoffs, and diagnostics. Only valid
+ready stories are startable after `epic-story-v1` adoption. Portable file-ledger
+runs remain a read-only projection distinct from Control Plane database runs.
+
+### Legacy flat tickets
 
 A ticket is a markdown file in `tickets/` at the repo checkout root — thrashed
-out in an interactive agent session, read-only to the control plane (no table;
-`GET /repos/:id/tickets` lists the folder). The UI renders a ticket and "Start
-work" creates a run with `ticket_id = <filename stem>`. Whenever a worker finds
-`tickets/<ticket_id>.md` in the checkout, every role's prompt points at it —
-the file, not the run title, is the spec.
+out in an interactive agent session (no table; `GET /repos/:id/tickets` lists
+the folder). This reader remains the missing-adapter compatibility path. The UI
+renders a ticket and "Start work" creates a run with
+`ticket_id = <filename stem>`.
 
 **Ticket-writing is an interface with a freeze step**: discuss → freeze →
 build. The discussion happens in the UI ("Shape an idea"): each turn is a

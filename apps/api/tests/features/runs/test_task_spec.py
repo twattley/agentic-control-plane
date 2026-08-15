@@ -1,6 +1,12 @@
+import json
 from types import SimpleNamespace
 
-from app.worker import _task_for
+import pytest
+
+from app.features.workflow import repository as workflow_repository
+from app.services import runs_service
+from app.worker import _task_for, run_pass
+from tests.conftest import AUTH
 
 
 def _detail(ticket_id="SBX-3", mode="direct", events=(), artifacts=()):
@@ -43,3 +49,121 @@ def test_fix_pass_keeps_spec_pointer(tmp_path):
 
     assert "fix the loop" in task
     assert "tickets/SBX-3.md" in task
+
+
+def test_prompt_follows_stable_identity_to_current_snapshot_locator(tmp_path):
+    current = tmp_path / "tickets" / "in-progress" / "E001-S00-current.md"
+    current.parent.mkdir(parents=True)
+    current.write_text("# Current")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    payload = {
+        "schema_version": "agent-workflow-snapshot-v1",
+        "ticket_contract": "epic-story-v1",
+        "epics": [],
+        "stories": [{
+            "kind": "story", "story_id": "E001-S00", "epic_id": "E001",
+            "coordination_class": "feature", "state": "in-progress",
+            "title": "Current", "path": "tickets/in-progress/E001-S00-current.md",
+            "claimable_roles": ["reviewer"], "diagnostic_codes": [],
+        }],
+        "legacy": [], "runs": [], "diagnostics": [],
+    }
+    command = scripts / "agent_workflow"
+    command.write_text(
+        "#!/bin/sh\n" + f"printf '%s\\n' '{json.dumps(payload)}'\n"
+    )
+    command.chmod(0o755)
+
+    task = _task_for(_detail(ticket_id="E001-S00"), "builder", str(tmp_path))
+
+    assert "tickets/in-progress/E001-S00-current.md" in task
+    assert "tickets/E001-S00.md" not in task
+
+
+@pytest.mark.parametrize(
+    "stories",
+    [
+        [{
+            "kind": "story", "story_id": "E001-S00", "epic_id": "E001",
+            "coordination_class": "feature", "state": "ready",
+            "title": "Missing", "path": "tickets/ready/missing.md",
+            "claimable_roles": ["builder"], "diagnostic_codes": [],
+        }],
+        [
+            {
+                "kind": "story", "story_id": "E001-S00", "epic_id": "E001",
+                "coordination_class": "feature", "state": "ready",
+                "title": "Duplicate", "path": "tickets/ready/first.md",
+                "claimable_roles": ["builder"], "diagnostic_codes": [],
+            },
+            {
+                "kind": "story", "story_id": "E001-S00", "epic_id": "E001",
+                "coordination_class": "feature", "state": "ready",
+                "title": "Duplicate", "path": "tickets/ready/second.md",
+                "claimable_roles": ["builder"], "diagnostic_codes": [],
+            },
+        ],
+    ],
+    ids=["missing", "duplicate"],
+)
+def test_prompt_surfaces_snapshot_document_resolution_failure(tmp_path, stories):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    payload = {
+        "schema_version": "agent-workflow-snapshot-v1",
+        "ticket_contract": "epic-story-v1",
+        "epics": [], "stories": stories, "legacy": [], "runs": [],
+        "diagnostics": [],
+    }
+    command = scripts / "agent_workflow"
+    command.write_text(
+        "#!/bin/sh\n" + f"printf '%s\\n' '{json.dumps(payload)}'\n"
+    )
+    command.chmod(0o755)
+
+    with pytest.raises(workflow_repository.WorkflowDocumentError):
+        _task_for(_detail(ticket_id="E001-S00"), "builder", str(tmp_path))
+
+
+async def test_prompt_resolution_failure_leaves_worker_run_unclaimed(
+    db, client, tmp_path
+):
+    tickets = tmp_path / "tickets"
+    tickets.mkdir()
+    (tickets / "T-1.md").write_text("# Startable before adapter\n")
+    repo_response = await client.post(
+        "/api/v1/repos",
+        json={"slug": "prompt-failure", "name": "Prompt failure", "path": str(tmp_path)},
+        headers=AUTH,
+    )
+    run_response = await client.post(
+        "/api/v1/runs",
+        json={"repo_id": repo_response.json()["id"], "ticket_id": "T-1", "title": "Test"},
+        headers=AUTH,
+    )
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    payload = {
+        "schema_version": "agent-workflow-snapshot-v1",
+        "ticket_contract": "epic-story-v1",
+        "epics": [],
+        "stories": [{
+            "kind": "story", "story_id": "T-1", "epic_id": "E001",
+            "coordination_class": "feature", "state": "ready",
+            "title": "Now unsafe", "path": "tickets/ready/missing.md",
+            "claimable_roles": ["builder"], "diagnostic_codes": [],
+        }],
+        "legacy": [], "runs": [], "diagnostics": [],
+    }
+    command = scripts / "agent_workflow"
+    command.write_text(
+        "#!/bin/sh\n" + f"printf '%s\\n' '{json.dumps(payload)}'\n"
+    )
+    command.chmod(0o755)
+
+    with pytest.raises(workflow_repository.WorkflowDocumentError):
+        await run_pass(db, run_response.json()["id"], "builder", "stub")
+
+    detail = await runs_service.run_detail(db, run_response.json()["id"])
+    assert detail.run.state == "queued"

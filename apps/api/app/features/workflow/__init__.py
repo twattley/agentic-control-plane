@@ -1,0 +1,1 @@
+"""Portable workflow snapshot adapter."""

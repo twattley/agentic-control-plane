@@ -12,6 +12,8 @@ import type {
   Ticket,
   TicketCreateInput,
   TicketDetail,
+  WorkflowDocument,
+  WorkflowProjection,
 } from '@agentic-control-plane/domain-types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiFetch, apiPost, apiPut } from './http'
@@ -54,6 +56,24 @@ export function useTicket(repoId: number, slug: string | null) {
     queryKey: ['ticket', repoId, slug],
     queryFn: () => apiFetch<TicketDetail>(`/repos/${repoId}/tickets/${slug}`),
     enabled: slug !== null,
+  })
+}
+
+export function useWorkflow(repoId: number) {
+  return useQuery({
+    queryKey: ['workflow', repoId],
+    queryFn: () => apiFetch<WorkflowProjection>(`/repos/${repoId}/workflow`),
+    refetchInterval: 10_000,
+  })
+}
+
+export function useWorkflowDocument(repoId: number, identity: string | null) {
+  return useQuery({
+    queryKey: ['workflow-document', repoId, identity],
+    queryFn: () => apiFetch<WorkflowDocument>(
+      `/repos/${repoId}/workflow/documents/${encodeURIComponent(identity ?? '')}`,
+    ),
+    enabled: identity !== null,
   })
 }
 

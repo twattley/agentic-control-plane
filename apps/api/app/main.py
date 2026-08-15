@@ -9,7 +9,13 @@ from app.features.discussions.controller import router as discussions_router
 from app.features.repos.controller import router as repos_router
 from app.features.runs.controller import router as runs_router
 from app.features.tickets.controller import router as tickets_router
-from app.services.runs_service import LeaseConflictError, RunNotFoundError
+from app.features.workflow.controller import router as workflow_router
+from app.features.workflow.repository import WorkflowReadError
+from app.services.runs_service import (
+    LeaseConflictError,
+    RunNotFoundError,
+    WorkUnitNotStartableError,
+)
 from app.services.state_machine import IllegalTransitionError
 
 
@@ -35,6 +41,7 @@ app.include_router(repos_router)
 app.include_router(runs_router)
 app.include_router(tickets_router)
 app.include_router(discussions_router)
+app.include_router(workflow_router)
 
 
 @app.exception_handler(RunNotFoundError)
@@ -50,6 +57,18 @@ async def _illegal_transition(_: Request, exc: IllegalTransitionError) -> JSONRe
 @app.exception_handler(LeaseConflictError)
 async def _lease_conflict(_: Request, exc: LeaseConflictError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(WorkUnitNotStartableError)
+async def _work_unit_not_startable(
+    _: Request, exc: WorkUnitNotStartableError
+) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(WorkflowReadError)
+async def _workflow_read_error(_: Request, exc: WorkflowReadError) -> JSONResponse:
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
 
 
 @app.get("/api/v1/health")

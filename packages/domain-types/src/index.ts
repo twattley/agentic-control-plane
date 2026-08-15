@@ -142,6 +142,75 @@ export interface TicketUpdateInput {
   content: string
 }
 
+export interface WorkflowEpic {
+  kind: 'epic'
+  epic_id: string
+  title: string
+  path: string
+  story_ids: string[]
+  story_counts: Record<string, number>
+}
+
+export interface WorkflowStory {
+  kind: 'story'
+  story_id: string
+  epic_id: string
+  coordination_class: string
+  state: string
+  title: string
+  path: string
+  claimable_roles: string[]
+  diagnostic_codes: string[]
+}
+
+export interface WorkflowLegacy {
+  kind: 'legacy'
+  legacy_id: string
+  title: string
+  path: string
+  state: string | null
+}
+
+export interface PortableWorkflowRun {
+  id: string
+  project_slug: string
+  work_unit_id: string
+  ticket_path: string
+  agent: string
+  role: string
+  status: string
+  ticket_kind: 'story' | 'legacy' | null
+  last_event: string | null
+}
+
+export interface WorkflowDiagnostic {
+  source: string
+  code: string
+  message: string
+  path: string
+  related_paths: string[]
+}
+
+export interface WorkflowProjection {
+  source: 'agent-workflow-snapshot-v1' | 'legacy-flat'
+  schema_version: 'agent-workflow-snapshot-v1' | null
+  ticket_contract: 'epic-story-v1' | null
+  epics: WorkflowEpic[]
+  stories: WorkflowStory[]
+  legacy: WorkflowLegacy[]
+  runs: PortableWorkflowRun[]
+  diagnostics: WorkflowDiagnostic[]
+}
+
+export interface WorkflowDocument {
+  identity: string
+  kind: 'epic' | 'story' | 'legacy'
+  path: string
+  title: string
+  summary: string | null
+  content: string
+}
+
 /** A ticket-shaping discussion — the strand that exists before a ticket is
  * frozen. Mirrors Discussion. */
 export type DiscussionState = 'open' | 'frozen'

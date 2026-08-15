@@ -20,13 +20,13 @@ import signal
 import subprocess
 import sys
 import urllib.request
-from pathlib import Path
 
 import asyncpg
 
 from app.config import settings
 from app.features.repos import repository as repos_repo
 from app.features.runs.models import ArtifactIn, ClaimIn, EventIn
+from app.features.workflow import repository as workflow_repo
 from app.services import executor, runs_service
 from app.services.runs_service import LeaseConflictError
 from app.services.state_machine import IllegalTransitionError
@@ -78,16 +78,22 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         return await _close_pass(pool, run_id)
 
     try:
-        await runs_service.claim(pool, run_id, ClaimIn(role=role, holder=provider))
-    except (IllegalTransitionError, LeaseConflictError, runs_service.RunNotFoundError):
+        detail = await runs_service.run_detail(pool, run_id)
+    except runs_service.RunNotFoundError:
         return "skipped"
-
-    detail = await runs_service.run_detail(pool, run_id)
     repo = await repos_repo.get_repo(pool, detail.run.repo_id)
     if repo is None:
         return "skipped"
 
+    # Resolve the specification before taking the lease. Unsafe or ambiguous
+    # snapshot locators must fail visibly while leaving the run inert.
     task = _task_for(detail, role, repo.path)
+
+    try:
+        await runs_service.claim(pool, run_id, ClaimIn(role=role, holder=provider))
+    except (IllegalTransitionError, LeaseConflictError, runs_service.RunNotFoundError):
+        return "skipped"
+
     result = subprocess.run(
         _agent_command(role, provider, task, repo.path),
         cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
@@ -225,9 +231,16 @@ def _task_for(detail, role: str, repo_path: str) -> str:
 def _spec_note(repo_path: str, ticket_id: str) -> str:
     """If the checkout has a ticket file for this run, every prompt points at it —
     the file, not the run title, is the full spec."""
-    if (Path(repo_path) / "tickets" / f"{ticket_id}.md").is_file():
-        return f" The full specification is in tickets/{ticket_id}.md — read it first."
-    return ""
+    workflow = workflow_repo.load_workflow(repo_path)
+    try:
+        document = workflow_repo.document_from_workflow(
+            repo_path, workflow, ticket_id
+        )
+    except workflow_repo.WorkflowDocumentError:
+        if workflow.source == "legacy-flat":
+            return ""
+        raise
+    return f" The full specification is in {document.path} — read it first."
 
 
 def _log(msg: str) -> None:
