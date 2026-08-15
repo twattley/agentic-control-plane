@@ -1,12 +1,13 @@
-# Ticket 010: Optional HTML artifact showing what a run produced
+# Ticket 010: Optional evidence artifact showing what a run produced
 
 ## Summary
 
-Some work has an outcome you should *see*, not infer from a diff — a chart, a
-rendered page, a table of pipeline output. Let a builder optionally attach a
-self-contained HTML artifact, and render it in the run view. Optional by
-design: a refactor's truth is its diff, and no run is ever required to produce
-one.
+Some work has an outcome you should *see*, not infer from a diff. Let a builder
+optionally attach one self-contained HTML artifact as **evidence the outcome
+happened**, and render it in the run view. Two flavours cover nearly everything:
+a rendered preview for visual work, and a demonstrated case table — real inputs
+beside real outputs — for data and logic work. Optional by design: a refactor's
+truth is its diff, and no run is ever required to produce one.
 
 ## Status
 
@@ -35,11 +36,24 @@ up after the build pass, attaches it as an `html` artifact, and the run view
 renders it inline (sandboxed) beneath the brief, above the diff. A run without
 one looks exactly as it does today.
 
+The evidence is drawn from the story's own `## Scenarios` and `## Done When`
+sections, so the artifact answers the acceptance criteria that were agreed at
+freeze rather than whatever the builder found easy to display:
+
+- **Visual work** — render the thing: the component, page, or chart as it now
+  looks.
+- **Data or logic work** — demonstrate the cases: a table of concrete inputs,
+  expected outputs, and actual outputs, one row per scenario, including the
+  edge and failure rows. Real values produced by running the code, never
+  hand-written prose claiming it works.
+
 ## Public Interface
 
 - Builder prompt gains an optional instruction: if the change has a visual or
   demonstrable outcome, write one self-contained HTML file (no external
-  requests) to `.agent-artifacts/<run_id>.html`; otherwise write nothing.
+  requests) to `.agent-artifacts/<run_id>.html` — a rendered preview for visual
+  work, or a case table of real inputs and actual outputs for data/logic work,
+  covering the story's scenarios; otherwise write nothing.
 - Worker: after the build pass, if that file exists, attach it as
   `ArtifactIn(kind="html", ...)` and delete it from the checkout so it never
   lands in the commit.
@@ -81,3 +95,6 @@ cd apps/web && npx tsc -b --noEmit
       same-origin script against the plane.
 - [ ] Prompt wording makes the artifact genuinely optional — no artifact is
       never treated as a failure by the reviewer.
+- [ ] Prompt wording asks for actual outputs from running the code, and the
+      reviewer treats a case table of asserted-but-unrun claims as grounds for
+      `VERDICT: changes`.
