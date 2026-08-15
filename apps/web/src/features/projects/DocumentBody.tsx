@@ -51,7 +51,20 @@ function statusPairs(body: string): [string, string][] {
 function Prose({ children }: { children: string }) {
   if (!children.trim()) return null
   return (
-    <div className="prose prose-sm prose-slate max-w-none overflow-x-auto">
+    // Sized down from prose-sm: a story is read on a phone, and the win is
+    // fitting more of one on screen rather than comfortable long-form reading.
+    <div
+      className="prose prose-sm prose-slate max-w-none overflow-x-auto
+        text-[13px] leading-snug
+        prose-p:my-1.5 prose-p:text-[13px]
+        prose-li:my-0.5 prose-li:text-[13px]
+        prose-ul:my-1.5 prose-ol:my-1.5
+        prose-headings:mb-1 prose-headings:mt-2.5 prose-headings:text-[13px]
+        prose-pre:my-2 prose-pre:p-2 prose-pre:text-[12px]
+        prose-code:text-[12px]
+        prose-table:my-2 prose-th:py-1 prose-th:text-[12px]
+        prose-td:py-1 prose-td:text-[12px]"
+    >
       {/* GFM is what makes the evidence case table render as a table rather
         * than a run of pipe-delimited prose. */}
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
@@ -84,11 +97,11 @@ function SectionBlock({ section }: { section: Section }) {
   if (items.length) {
     return (
       <div className="space-y-1">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           {section.heading}
         </h4>
         {items.map((item) => (
-          <div key={item.text} className="flex gap-2 text-sm text-slate-700">
+          <div key={item.text} className="flex gap-2 text-[13px] leading-snug text-slate-700">
             <span className={item.done ? 'text-emerald-600' : 'text-slate-300'}>
               {item.done ? '☑' : '☐'}
             </span>
@@ -104,7 +117,7 @@ function SectionBlock({ section }: { section: Section }) {
   return (
     <div className="space-y-1">
       {section.heading && (
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           {section.heading}
         </h4>
       )}
@@ -117,7 +130,7 @@ export function DocumentBody({ content }: { content: string }) {
   // Drop the leading `# Title` — the row header already shows it.
   const withoutTitle = content.replace(/^#\s+.*\n?/, '')
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {splitSections(withoutTitle).map((section, index) => (
         <SectionBlock key={`${section.heading}-${index}`} section={section} />
       ))}

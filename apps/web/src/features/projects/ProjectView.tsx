@@ -445,8 +445,8 @@ function WorkflowWorkRow({
       <button type="button" onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-slate-50">
         <div className="min-w-0">
-          <div className="truncate font-medium text-slate-900">{item.title}</div>
-          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+          <div className="font-medium leading-snug text-slate-900">{item.title}</div>
+          <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
             <span>{identity}</span>
             {item.state && <span>state · {item.state}</span>}
             {item.kind === 'story' && <span>coordination · {item.coordination_class}</span>}
