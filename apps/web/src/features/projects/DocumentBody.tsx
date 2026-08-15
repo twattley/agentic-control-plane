@@ -137,23 +137,6 @@ function SectionBlock({ section }: { section: Section }) {
     )
   }
 
-  if (AGENT_SECTIONS.has(name)) {
-    return (
-      <details className="group rounded border border-slate-100 bg-slate-50/60">
-        <summary className="cursor-pointer list-none px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 active:bg-slate-100">
-          <span className="mr-1 inline-block group-open:rotate-90">▸</span>
-          {section.heading}
-          <span className="ml-1 font-normal normal-case tracking-normal text-slate-300">
-            {hint(name, section.body)}
-          </span>
-        </summary>
-        <div className="px-2 pb-2">
-          <Prose>{section.body}</Prose>
-        </div>
-      </details>
-    )
-  }
-
   return (
     <div className="space-y-1">
       {section.heading && (
@@ -169,11 +152,42 @@ function SectionBlock({ section }: { section: Section }) {
 export function DocumentBody({ content }: { content: string }) {
   // Drop the leading `# Title` — the row header already shows it.
   const withoutTitle = content.replace(/^#\s+.*\n?/, '')
+  const sections = splitSections(withoutTitle)
+  const isAgent = (s: Section) => AGENT_SECTIONS.has(s.heading.toLowerCase())
+  // One disclosure, not one per section: five collapsed rows is still five
+  // rows of noise under what you actually came to read.
+  const technical = sections.filter(isAgent)
+
   return (
     <div className="space-y-2">
-      {splitSections(withoutTitle).map((section, index) => (
+      {sections.filter((s) => !isAgent(s)).map((section, index) => (
         <SectionBlock key={`${section.heading}-${index}`} section={section} />
       ))}
+
+      {technical.length > 0 && (
+        <details className="group rounded border border-slate-200 bg-slate-50/60">
+          <summary className="cursor-pointer list-none px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 active:bg-slate-100">
+            <span className="mr-1.5 inline-block transition-transform group-open:rotate-90">▸</span>
+            Technical detail
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">
+              {technical.map((s) => s.heading.toLowerCase()).join(' · ')}
+            </span>
+          </summary>
+          <div className="space-y-2 border-t border-slate-200 px-2 py-2">
+            {technical.map((section, index) => (
+              <div key={`${section.heading}-${index}`} className="space-y-1">
+                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  {section.heading}
+                  <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-300">
+                    {hint(section.heading.toLowerCase(), section.body)}
+                  </span>
+                </h4>
+                <Prose>{section.body}</Prose>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   )
 }
