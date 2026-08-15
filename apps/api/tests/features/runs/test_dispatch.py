@@ -58,7 +58,8 @@ async def _drive_to_closing(client, run_id: int) -> None:
     await post("/claim", {"role": "builder", "holder": "codex"})
     await post("/events", {"type": "builder_brief_posted", "actor": "builder"})
     await post("/claim", {"role": "reviewer", "holder": "claude"})
-    await post("/events", {"type": "reviewer_findings_posted", "actor": "reviewer", "payload": {"verdict": "pass"}})
+    await post("/events", {"type": "reviewer_findings_posted", "actor": "reviewer",
+                           "payload": {"verdict": "pass"}})
     await post("/decision", {"decision": "approve"})
     await post("/decision", {"decision": "close"})
 
@@ -79,7 +80,9 @@ async def test_closer_gate_pass_commits_and_closes(db, client, tmp_path):
 
     assert await run_pass(db, run_id, "closer", "system") == "done"
     assert await _state(client, run_id) == "closed"
-    log = subprocess.run(["git", "-C", str(repo_dir), "log", "--oneline"], capture_output=True, text=True)
+    log = subprocess.run(
+        ["git", "-C", str(repo_dir), "log", "--oneline"], capture_output=True, text=True
+    )
     assert "t1" in log.stdout  # ticket id landed in the commit message
 
 

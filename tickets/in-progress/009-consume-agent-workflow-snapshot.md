@@ -13,10 +13,14 @@ continue to link by stable work-unit identity after story moves or renames.
 - State: in-progress
 - Phase: review-loop
 - Started: 2026-08-15 06:22 BST
-- Updated: 2026-08-15
+- Updated: 2026-08-15 14:48 BST
 - Completed: —
-- Last: 2026-08-15 09:05:13 BST - builder run cc0414c228557051, reviewer fixes and ticket-owned validation green; repository-wide Ruff baseline unchanged
-- Next: reviewer rechecks unsafe-locator, prompt-inertness, and strict-validation fixes; human resolves or explicitly rescopes the pre-existing repository-wide Ruff baseline
+- Last: 2026-08-15 14:48 BST - human resolved the Ruff baseline by fixing it
+  rather than rescoping: 19 errors (18 E501, 1 import-sort) cleared, repo-wide
+  `ruff check apps/api` green, 126 pytest green
+- Next: reviewer rechecks all three findings — unsafe locator (create_run now
+  gates on document_from_workflow), strict snapshot models (strict=True on
+  SnapshotRecord and WorkflowSnapshot), and the now-green gate — then close
 
 ## Capability
 

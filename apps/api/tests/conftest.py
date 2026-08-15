@@ -3,10 +3,11 @@ from pathlib import Path
 
 import asyncpg
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
 from app import database
 from app.config import settings
 from app.main import app
-from httpx import ASGITransport, AsyncClient
 
 # Bearer header every test sends. Matches the dev default in Settings.auth_token.
 AUTH = {"Authorization": f"Bearer {settings.auth_token}"}

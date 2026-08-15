@@ -25,6 +25,32 @@ async def _state(client, run_id: int) -> str:
     return r.json()["run"]["state"]
 
 
+async def _claim(client, run_id: int, role: str, holder: str):
+    return await client.post(
+        f"/api/v1/runs/{run_id}/claim",
+        json={"role": role, "holder": holder}, headers=AUTH,
+    )
+
+
+async def _event(client, run_id: int, type_: str, actor: str, **payload):
+    return await client.post(
+        f"/api/v1/runs/{run_id}/events",
+        json={"type": type_, "actor": actor, "payload": payload}, headers=AUTH,
+    )
+
+
+async def _decide(client, run_id: int, decision: str, **extra):
+    return await client.post(
+        f"/api/v1/runs/{run_id}/decision",
+        json={"decision": decision, **extra}, headers=AUTH,
+    )
+
+
+async def _queue(client, name: str) -> list[int]:
+    q = (await client.get(f"/api/v1/queue/{name}", headers=AUTH)).json()
+    return [r["id"] for r in q]
+
+
 async def test_new_run_starts_queued_with_created_event(client):
     run_id = await _run(client)
     detail = (await client.get(f"/api/v1/runs/{run_id}", headers=AUTH)).json()
@@ -36,65 +62,63 @@ async def test_full_happy_path_to_closed(client):
     run_id = await _run(client)
 
     # builder claims -> building
-    await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "builder", "holder": "codex"}, headers=AUTH)
+    await _claim(client, run_id, "builder", "codex")
     assert await _state(client, run_id) == "building"
 
     # builder posts brief -> awaiting_review, attaches diff
-    await client.post(f"/api/v1/runs/{run_id}/events", json={"type": "builder_brief_posted", "actor": "builder"}, headers=AUTH)
+    await _event(client, run_id, "builder_brief_posted", "builder")
     assert await _state(client, run_id) == "awaiting_review"
-    await client.post(f"/api/v1/runs/{run_id}/artifacts", json={"kind": "diff", "content": "diff --git ..."}, headers=AUTH)
+    await client.post(
+        f"/api/v1/runs/{run_id}/artifacts",
+        json={"kind": "diff", "content": "diff --git ..."}, headers=AUTH,
+    )
 
-    # in review queue
-    q = (await client.get("/api/v1/queue/review", headers=AUTH)).json()
-    assert [r["id"] for r in q] == [run_id]
+    assert await _queue(client, "review") == [run_id]
 
     # reviewer claims -> reviewing, requests changes -> needs_work
-    await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "reviewer", "holder": "claude"}, headers=AUTH)
-    await client.post(f"/api/v1/runs/{run_id}/events", json={"type": "reviewer_findings_posted", "actor": "reviewer", "payload": {"verdict": "changes"}}, headers=AUTH)
+    await _claim(client, run_id, "reviewer", "claude")
+    await _event(
+        client, run_id, "reviewer_findings_posted", "reviewer", verdict="changes"
+    )
     assert await _state(client, run_id) == "needs_work"
 
-    # in fix queue
-    q = (await client.get("/api/v1/queue/fix", headers=AUTH)).json()
-    assert [r["id"] for r in q] == [run_id]
+    assert await _queue(client, "fix") == [run_id]
 
     # builder fixes -> fixing -> awaiting_review; reviewer passes -> awaiting_human
-    await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "builder", "holder": "codex"}, headers=AUTH)
+    await _claim(client, run_id, "builder", "codex")
     assert await _state(client, run_id) == "fixing"
-    await client.post(f"/api/v1/runs/{run_id}/events", json={"type": "builder_brief_posted", "actor": "builder"}, headers=AUTH)
-    await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "reviewer", "holder": "claude"}, headers=AUTH)
-    await client.post(f"/api/v1/runs/{run_id}/events", json={"type": "reviewer_findings_posted", "actor": "reviewer", "payload": {"verdict": "pass"}}, headers=AUTH)
+    await _event(client, run_id, "builder_brief_posted", "builder")
+    await _claim(client, run_id, "reviewer", "claude")
+    await _event(
+        client, run_id, "reviewer_findings_posted", "reviewer", verdict="pass"
+    )
     assert await _state(client, run_id) == "awaiting_human"
 
-    # in human queue
-    q = (await client.get("/api/v1/queue/human", headers=AUTH)).json()
-    assert [r["id"] for r in q] == [run_id]
+    assert await _queue(client, "human") == [run_id]
 
     # human approves -> approved -> closing (closer worker gates+commits) -> closed
-    await client.post(f"/api/v1/runs/{run_id}/decision", json={"decision": "approve"}, headers=AUTH)
+    await _decide(client, run_id, "approve")
     assert await _state(client, run_id) == "approved"
-    await client.post(f"/api/v1/runs/{run_id}/decision", json={"decision": "close"}, headers=AUTH)
+    await _decide(client, run_id, "close")
     assert await _state(client, run_id) == "closing"
     # the closer reports the gate passed
-    await client.post(f"/api/v1/runs/{run_id}/events", json={"type": "gate_passed", "actor": "system"}, headers=AUTH)
+    await _event(client, run_id, "gate_passed", "system")
     assert await _state(client, run_id) == "closed"
 
 
 async def test_illegal_transition_is_409(client):
     run_id = await _run(client)
     # reviewer cannot claim a queued run
-    r = await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "reviewer", "holder": "claude"}, headers=AUTH)
-    assert r.status_code == 409
+    assert (await _claim(client, run_id, "reviewer", "claude")).status_code == 409
     # cannot approve a queued run
-    r = await client.post(f"/api/v1/runs/{run_id}/decision", json={"decision": "approve"}, headers=AUTH)
-    assert r.status_code == 409
+    assert (await _decide(client, run_id, "approve")).status_code == 409
 
 
 async def test_double_builder_claim_conflicts(client):
     run_id = await _run(client)
-    await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "builder", "holder": "codex"}, headers=AUTH)
+    await _claim(client, run_id, "builder", "codex")
     # second builder claim: illegal transition (building has no builder-claim edge)
-    r = await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "builder", "holder": "codex"}, headers=AUTH)
-    assert r.status_code == 409
+    assert (await _claim(client, run_id, "builder", "codex")).status_code == 409
 
 
 async def test_missing_run_is_404(client):
@@ -104,7 +128,7 @@ async def test_missing_run_is_404(client):
 
 async def test_block_from_active_state(client):
     run_id = await _run(client)
-    await client.post(f"/api/v1/runs/{run_id}/claim", json={"role": "builder", "holder": "codex"}, headers=AUTH)
-    r = await client.post(f"/api/v1/runs/{run_id}/decision", json={"decision": "block", "note": "waiting on infra"}, headers=AUTH)
+    await _claim(client, run_id, "builder", "codex")
+    r = await _decide(client, run_id, "block", note="waiting on infra")
     assert r.status_code == 200
     assert await _state(client, run_id) == "blocked"
