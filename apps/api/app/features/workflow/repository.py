@@ -1,11 +1,15 @@
 import json
+import re
 import subprocess
+from datetime import date
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from app.features.tickets.repository import list_tickets, ticket_summary
 from app.features.workflow.models import (
+    AuthoredStory,
+    StoryCreateIn,
     WorkflowDocument,
     WorkflowLegacy,
     WorkflowProjection,
@@ -22,6 +26,10 @@ class WorkflowReadError(Exception):
 
 class WorkflowDocumentError(Exception):
     """A stable identity did not resolve to one safe current document."""
+
+
+class WorkflowAuthorError(Exception):
+    """Story authoring refused: no tool, or the story is in the wrong state."""
 
 
 def load_workflow(repo_path: str) -> WorkflowProjection:
@@ -98,6 +106,83 @@ def document_from_workflow(
         title=title,
         summary=ticket_summary(path),
         content=content,
+    )
+
+
+def create_story(repo_path: str, data: StoryCreateIn) -> AuthoredStory:
+    """Delegate identity allocation and skeleton authoring to the repo's own
+    tool, then merge the shaped body (if any) below the skeleton's Status."""
+    root = Path(repo_path).resolve()
+    command = root / "scripts" / "agent_workflow"
+    if not command.is_file():
+        raise WorkflowAuthorError(
+            "repo has no scripts/agent_workflow — install the workflow kit to author stories"
+        )
+    try:
+        result = subprocess.run(
+            [str(command), "create-story", data.epic_id,
+             "--title", data.title, "--coordination-class", data.coordination_class],
+            cwd=root, capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise WorkflowReadError(f"create-story failed: {exc}") from exc
+    if result.returncode != 0:
+        raise WorkflowReadError(
+            f"create-story failed: {(result.stderr or result.stdout).strip()[:300]}"
+        )
+    try:
+        story = json.loads(result.stdout)["story"]
+        authored = AuthoredStory(
+            story_id=story["story_id"], epic_id=story["epic_id"],
+            coordination_class=story["coordination_class"], state=story["state"],
+            title=story["title"], path=story["path"],
+        )
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise WorkflowReadError("create-story emitted an unexpected payload") from exc
+
+    if data.body:
+        path = _safe_ticket_path(root, authored.path)
+        path.write_text(_merge_story_body(path.read_text(), data.body))
+    return authored
+
+
+def _merge_story_body(skeleton: str, body: str) -> str:
+    """Keep the tool's title/Identity/Status header; replace everything from
+    `## Story` down with the shaped body."""
+    head, sep, _ = skeleton.partition("\n## Story\n")
+    content = body.strip()
+    if not content.startswith("#"):
+        content = "## Story\n\n" + content
+    if not sep:
+        return skeleton.rstrip() + "\n\n" + content + "\n"
+    return head.rstrip() + "\n\n" + content + "\n"
+
+
+def mark_ready(repo_path: str, story_id: str) -> AuthoredStory:
+    """The backlog -> ready promotion: an atomic move that preserves identity
+    and updates the Status block, exactly as the contract prescribes."""
+    root = Path(repo_path).resolve()
+    workflow = load_workflow(repo_path)
+    story = next((s for s in workflow.stories if s.story_id == story_id), None)
+    if story is None:
+        raise WorkflowDocumentError(f"story {story_id!r} not found")
+    if story.state != "backlog":
+        raise WorkflowAuthorError(f"story {story_id} is {story.state!r}, only backlog promotes")
+
+    source = _safe_ticket_path(root, story.path)
+    text = source.read_text()
+    text = re.sub(r"^- State: .*$", "- State: ready", text, count=1, flags=re.MULTILINE)
+    text = re.sub(r"^- Phase: .*$", "- Phase: queued", text, count=1, flags=re.MULTILINE)
+    text = re.sub(r"^- Updated: .*$", f"- Updated: {date.today().isoformat()}",
+                  text, count=1, flags=re.MULTILINE)
+    dest_dir = root / "tickets" / "ready"
+    dest_dir.mkdir(exist_ok=True)
+    (dest_dir / source.name).write_text(text)
+    source.unlink()
+    return AuthoredStory(
+        story_id=story.story_id, epic_id=story.epic_id,
+        coordination_class=story.coordination_class, state="ready",
+        title=story.title, path=f"tickets/ready/{source.name}",
     )
 
 

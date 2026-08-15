@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import require_token
@@ -14,6 +16,8 @@ from app.features.repos import repository as repos_repo
 from app.features.repos.models import Repo
 from app.features.tickets import repository as tickets_repo
 from app.features.tickets.models import TicketDetail
+from app.features.workflow import repository as workflow_repo
+from app.features.workflow.models import StoryCreateIn
 from app.services import discussion_agent
 from app.services.discussion_agent import AgentError
 
@@ -95,14 +99,51 @@ async def send_message(repo_id: int, discussion_id: int, data: MessageIn) -> Dis
 @router.post("/{discussion_id}/freeze")
 async def freeze_discussion(repo_id: int, discussion_id: int, data: FreezeIn) -> TicketDetail:
     """The freeze step: one final agent turn produces the ticket markdown, and
-    the PLANE writes the file through the tickets feature — the agent never does."""
+    the PLANE writes the file — the agent never does. Legacy repos get a flat
+    ticket at `slug`; contract repos get a story under `epic_id`, with identity
+    allocated by the repo's own create-story tool."""
+    if data.slug is None and data.epic_id is None:
+        raise HTTPException(status_code=422, detail="freeze needs a slug or an epic_id")
     repo = await _repo_or_404(repo_id)
     disc = await _open_discussion_or_error(discussion_id, repo_id)
     detail = await _turn(repo, disc, discussion_agent.FREEZE_PROMPT)
     content = discussion_agent.strip_fence(detail.messages[-1].content)
-    try:
-        ticket = tickets_repo.create_ticket(repo.path, data.slug, content)
-    except tickets_repo.TicketExistsError:
-        raise HTTPException(status_code=409, detail=f"ticket {data.slug} already exists") from None
-    await repository.set_frozen(await get_pool(), discussion_id, data.slug)
+
+    if data.epic_id is not None:
+        ticket = _freeze_story(repo, data, content)
+    else:
+        try:
+            ticket = tickets_repo.create_ticket(repo.path, data.slug, content)
+        except tickets_repo.TicketExistsError:
+            raise HTTPException(
+                status_code=409, detail=f"ticket {data.slug} already exists"
+            ) from None
+    await repository.set_frozen(await get_pool(), discussion_id, ticket.slug)
     return ticket
+
+
+def _freeze_story(repo: Repo, data: FreezeIn, content: str) -> TicketDetail:
+    title, body = _split_title(content)
+    try:
+        authored = workflow_repo.create_story(repo.path, StoryCreateIn(
+            epic_id=data.epic_id, coordination_class=data.coordination_class,
+            title=title, body=body,
+        ))
+    except workflow_repo.WorkflowAuthorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except workflow_repo.WorkflowReadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    path = Path(repo.path) / authored.path
+    return TicketDetail(
+        slug=authored.story_id, title=authored.title,
+        summary=tickets_repo.ticket_summary(path), content=path.read_text(),
+    )
+
+
+def _split_title(content: str) -> tuple[str, str]:
+    """First `# ` heading becomes the story title; the rest is the body."""
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("# "):
+            return line[2:].strip(), "\n".join(lines[i + 1:]).strip()
+    return "Shaped story", content.strip()

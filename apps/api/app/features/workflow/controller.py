@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import require_token
 from app.database import get_pool
 from app.features.repos import repository as repos_repo
 from app.features.repos.models import Repo
 from app.features.workflow import repository
-from app.features.workflow.models import WorkflowDocument, WorkflowProjection
+from app.features.workflow.models import (
+    AuthoredStory,
+    StoryCreateIn,
+    WorkflowDocument,
+    WorkflowProjection,
+)
 
 router = APIRouter(
     prefix="/api/v1/repos/{repo_id}/workflow",
@@ -39,3 +44,27 @@ async def get_workflow_document(repo_id: int, identity: str) -> WorkflowDocument
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except repository.WorkflowDocumentError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/stories", status_code=status.HTTP_201_CREATED)
+async def create_story(repo_id: int, data: StoryCreateIn) -> AuthoredStory:
+    repo = await _repo_or_404(repo_id)
+    try:
+        return repository.create_story(repo.path, data)
+    except repository.WorkflowAuthorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except repository.WorkflowReadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/stories/{story_id}/ready")
+async def mark_story_ready(repo_id: int, story_id: str) -> AuthoredStory:
+    repo = await _repo_or_404(repo_id)
+    try:
+        return repository.mark_ready(repo.path, story_id)
+    except repository.WorkflowDocumentError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except repository.WorkflowAuthorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except repository.WorkflowReadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

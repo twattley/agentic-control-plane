@@ -1,10 +1,14 @@
-import type { DiscussionMessage } from '@agentic-control-plane/domain-types'
+import type {
+  CoordinationClass, DiscussionMessage, WorkflowEpic,
+} from '@agentic-control-plane/domain-types'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import {
   useDiscussion, useDiscussions, useFreezeDiscussion,
   useSendDiscussionMessage, useStartDiscussion,
 } from '../../api/hooks'
+
+const CLASSES: CoordinationClass[] = ['feature', 'contract', 'platform', 'validation']
 
 function Message({ m }: { m: DiscussionMessage }) {
   if (m.role === 'human') {
@@ -21,7 +25,9 @@ function Message({ m }: { m: DiscussionMessage }) {
   )
 }
 
-export function DiscussionPanel({ repoId, onClose }: { repoId: number; onClose: () => void }) {
+export function DiscussionPanel({
+  repoId, onClose, epics,
+}: { repoId: number; onClose: () => void; epics?: WorkflowEpic[] }) {
   // Reopen the latest open discussion if one exists; otherwise start fresh.
   const { data: discussions } = useDiscussions(repoId)
   const latestOpen = discussions?.find((d) => d.state === 'open') ?? null
@@ -35,6 +41,9 @@ export function DiscussionPanel({ repoId, onClose }: { repoId: number; onClose: 
 
   const [draft, setDraft] = useState('')
   const [slug, setSlug] = useState('')
+  const [epicId, setEpicId] = useState('')
+  const [klass, setKlass] = useState<CoordinationClass>('feature')
+  const contractMode = !!epics?.length
   const thinking = start.isPending || send.isPending || freeze.isPending
 
   const submit = () => {
@@ -47,8 +56,17 @@ export function DiscussionPanel({ repoId, onClose }: { repoId: number; onClose: 
   }
 
   const doFreeze = () => {
-    if (discussionId === null || !slug.trim() || thinking) return
-    freeze.mutate({ id: discussionId, slug: slug.trim() }, { onSuccess: onClose })
+    if (discussionId === null || thinking) return
+    if (contractMode) {
+      if (!epicId) return
+      freeze.mutate(
+        { id: discussionId, epic_id: epicId, coordination_class: klass },
+        { onSuccess: onClose },
+      )
+    } else {
+      if (!slug.trim()) return
+      freeze.mutate({ id: discussionId, slug: slug.trim() }, { onSuccess: onClose })
+    }
   }
 
   const error = start.error ?? send.error ?? freeze.error
@@ -86,12 +104,30 @@ export function DiscussionPanel({ repoId, onClose }: { repoId: number; onClose: 
 
       {discussionId !== null && (
         <div className="flex gap-2 border-t border-slate-100 pt-3">
-          <input value={slug} onChange={(e) => setSlug(e.target.value.trim())}
-            placeholder="ticket id, e.g. TR-1"
-            className="flex-1 rounded border border-slate-300 px-3 py-2 font-mono text-sm" />
-          <button type="button" onClick={doFreeze} disabled={thinking || !slug.trim()}
+          {contractMode ? (
+            <>
+              <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
+                className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-2 text-sm">
+                <option value="">epic…</option>
+                {epics?.map((e) => (
+                  <option key={e.epic_id} value={e.epic_id}>{e.epic_id} · {e.title}</option>
+                ))}
+              </select>
+              <select value={klass}
+                onChange={(e) => setKlass(e.target.value as CoordinationClass)}
+                className="rounded border border-slate-300 bg-white px-2 py-2 text-sm">
+                {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </>
+          ) : (
+            <input value={slug} onChange={(e) => setSlug(e.target.value.trim())}
+              placeholder="ticket id, e.g. TR-1"
+              className="flex-1 rounded border border-slate-300 px-3 py-2 font-mono text-sm" />
+          )}
+          <button type="button" onClick={doFreeze}
+            disabled={thinking || (contractMode ? !epicId : !slug.trim())}
             className="rounded-lg bg-blue-600 px-4 text-sm font-medium text-white disabled:opacity-40">
-            {freeze.isPending ? 'freezing…' : 'Freeze ticket'}
+            {freeze.isPending ? 'freezing…' : contractMode ? 'Freeze story' : 'Freeze ticket'}
           </button>
         </div>
       )}

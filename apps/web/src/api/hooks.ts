@@ -1,5 +1,7 @@
 import type {
+  AuthoredStory,
   BoardPane,
+  CoordinationClass,
   DecisionInput,
   Discussion,
   DiscussionDetail,
@@ -9,6 +11,7 @@ import type {
   Run,
   RunDetail,
   RunInput,
+  StoryCreateInput,
   Ticket,
   TicketCreateInput,
   TicketDetail,
@@ -113,14 +116,38 @@ export function useSendDiscussionMessage(repoId: number) {
   })
 }
 
+export interface FreezeTarget {
+  id: number
+  slug?: string
+  epic_id?: string
+  coordination_class?: CoordinationClass
+}
+
 export function useFreezeDiscussion(repoId: number) {
   return useMutation({
-    mutationFn: ({ id, slug }: { id: number; slug: string }) =>
-      apiPost<TicketDetail>(`/repos/${repoId}/discussions/${id}/freeze`, { slug }),
+    mutationFn: ({ id, ...target }: FreezeTarget) =>
+      apiPost<TicketDetail>(`/repos/${repoId}/discussions/${id}/freeze`, target),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets', repoId] })
       queryClient.invalidateQueries({ queryKey: ['discussions', repoId] })
+      queryClient.invalidateQueries({ queryKey: ['workflow', repoId] })
     },
+  })
+}
+
+export function useCreateStory(repoId: number) {
+  return useMutation({
+    mutationFn: (body: StoryCreateInput) =>
+      apiPost<AuthoredStory>(`/repos/${repoId}/workflow/stories`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', repoId] }),
+  })
+}
+
+export function useMarkStoryReady(repoId: number) {
+  return useMutation({
+    mutationFn: (storyId: string) =>
+      apiPost<AuthoredStory>(`/repos/${repoId}/workflow/stories/${storyId}/ready`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', repoId] }),
   })
 }
 

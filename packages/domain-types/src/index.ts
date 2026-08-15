@@ -211,6 +211,25 @@ export interface WorkflowDocument {
   content: string
 }
 
+export type CoordinationClass = 'contract' | 'platform' | 'feature' | 'validation'
+
+/** Author a story via the repo's own create-story tool. Mirrors StoryCreateIn. */
+export interface StoryCreateInput {
+  epic_id: string
+  coordination_class: CoordinationClass
+  title: string
+  body?: string | null
+}
+
+export interface AuthoredStory {
+  story_id: string
+  epic_id: string
+  coordination_class: string
+  state: string
+  title: string
+  path: string
+}
+
 /** A ticket-shaping discussion — the strand that exists before a ticket is
  * frozen. Mirrors Discussion. */
 export type DiscussionState = 'open' | 'frozen'

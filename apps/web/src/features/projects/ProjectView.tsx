@@ -1,4 +1,5 @@
 import type {
+  CoordinationClass,
   ProviderSpec,
   Run,
   RunMode,
@@ -11,8 +12,8 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import {
-  useCreateRun, useCreateTicket, useRepo, useRepoRuns,
-  useTicket, useTickets, useUpdateTicket, useWorkflow, useWorkflowDocument,
+  useCreateRun, useCreateStory, useCreateTicket, useMarkStoryReady, useRepo,
+  useRepoRuns, useTicket, useTickets, useUpdateTicket, useWorkflow, useWorkflowDocument,
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
@@ -306,6 +307,59 @@ function DocsSection({ repoId, docs, runs }: { repoId: number; docs: Ticket[]; r
   )
 }
 
+const CLASSES: CoordinationClass[] = ['feature', 'contract', 'platform', 'validation']
+
+function NewStoryForm({
+  repoId, workflow, onDone,
+}: { repoId: number; workflow: WorkflowProjection; onDone: () => void }) {
+  const create = useCreateStory(repoId)
+  const [epicId, setEpicId] = useState(workflow.epics[0]?.epic_id ?? '')
+  const [klass, setKlass] = useState<CoordinationClass>('feature')
+  const [title, setTitle] = useState('')
+
+  const save = () => {
+    if (!title.trim() || !epicId) return
+    create.mutate(
+      { epic_id: epicId, coordination_class: klass, title: title.trim() },
+      { onSuccess: onDone },
+    )
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-sm text-slate-500">
+        Creates a canonical story skeleton in <code>backlog/</code> via the repo's own
+        tool — shape it, then mark it ready.
+      </p>
+      <input className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+        placeholder="story title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div className="flex gap-2">
+        <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
+          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-2 text-sm">
+          {workflow.epics.map((e) => (
+            <option key={e.epic_id} value={e.epic_id}>{e.epic_id} · {e.title}</option>
+          ))}
+        </select>
+        <select value={klass} onChange={(e) => setKlass(e.target.value as CoordinationClass)}
+          className="rounded border border-slate-300 bg-white px-2 py-2 text-sm">
+          {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" onClick={save} disabled={create.isPending || !title.trim() || !epicId}
+          className="flex-1 rounded-lg bg-slate-900 py-2.5 font-medium text-white disabled:opacity-40">
+          {create.isPending ? 'creating…' : 'Create story'}
+        </button>
+        <button type="button" onClick={onDone}
+          className="rounded-lg border border-slate-300 px-4 text-sm text-slate-600">
+          Cancel
+        </button>
+      </div>
+      {create.error && <p className="text-sm text-red-600">{String(create.error)}</p>}
+    </div>
+  )
+}
+
 function WorkflowWorkRow({
   repoId, item, workflow, runs,
 }: {
@@ -320,6 +374,7 @@ function WorkflowWorkRow({
   const [builder, setBuilder] = useState<ProviderSpec>(DEFAULT_BUILDER)
   const [reviewer, setReviewer] = useState<ProviderSpec>(DEFAULT_REVIEWER)
   const create = useCreateRun(repoId)
+  const markReady = useMarkStoryReady(repoId)
   const { data: document, error: documentError } = useWorkflowDocument(
     repoId, open ? identity : null,
   )
@@ -378,6 +433,15 @@ function WorkflowWorkRow({
               Control Plane run · {currentRun.state}
             </Link>
           )}
+          {item.kind === 'story' && item.state === 'backlog'
+            && item.diagnostic_codes.length === 0 && !active && (
+            <button type="button" disabled={markReady.isPending}
+              onClick={() => markReady.mutate(item.story_id)}
+              className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 disabled:opacity-40">
+              {markReady.isPending ? 'promoting…' : 'Mark ready'}
+            </button>
+          )}
+          {markReady.error && <p className="text-sm text-red-600">{String(markReady.error)}</p>}
           {startable && (
             <>
               <ModeToggle mode={mode} onChange={setMode} />
@@ -401,9 +465,33 @@ function WorkflowProject({
 }: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
   const knownEpicIds = new Set(workflow.epics.map((epic) => epic.epic_id))
   const ungrouped = workflow.stories.filter((story) => !knownEpicIds.has(story.epic_id))
+  const [shaping, setShaping] = useState(false)
+  const [composing, setComposing] = useState(false)
 
   return (
     <section className="space-y-4">
+      <div className="flex items-center justify-end gap-3">
+        {!shaping && (
+          <button type="button" onClick={() => setShaping(true)}
+            className="text-sm font-medium text-blue-600">
+            Shape an idea
+          </button>
+        )}
+        {!composing && (
+          <button type="button" onClick={() => setComposing(true)}
+            className="text-sm font-medium text-blue-600">
+            + New story
+          </button>
+        )}
+      </div>
+      {shaping && (
+        <DiscussionPanel repoId={repoId} epics={workflow.epics}
+          onClose={() => setShaping(false)} />
+      )}
+      {composing && (
+        <NewStoryForm repoId={repoId} workflow={workflow}
+          onDone={() => setComposing(false)} />
+      )}
       {workflow.diagnostics.length > 0 && (
         <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <h2 className="font-semibold text-amber-900">Workflow diagnostics</h2>

@@ -1,6 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+CoordinationClass = Literal["contract", "platform", "feature", "validation"]
 
 
 class SnapshotRecord(BaseModel):
@@ -86,3 +88,22 @@ class WorkflowDocument(BaseModel):
     title: str
     summary: str | None
     content: str
+
+
+class StoryCreateIn(BaseModel):
+    """Author a story through the repo's own create-story tool; the optional
+    body (from a freeze or the composer) replaces the skeleton's sections."""
+
+    epic_id: str
+    coordination_class: CoordinationClass
+    title: str = Field(min_length=1)
+    body: str | None = None
+
+
+class AuthoredStory(BaseModel):
+    story_id: str
+    epic_id: str
+    coordination_class: str
+    state: str
+    title: str
+    path: str
