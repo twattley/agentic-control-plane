@@ -9,8 +9,8 @@ from app.worker import _task_for, run_pass
 from tests.conftest import AUTH
 
 
-def _detail(ticket_id="SBX-3", mode="direct", events=(), artifacts=()):
-    run = SimpleNamespace(ticket_id=ticket_id, title="Do the thing", mode=mode)
+def _detail(ticket_id="SBX-3", mode="direct", events=(), artifacts=(), run_id=7):
+    run = SimpleNamespace(id=run_id, ticket_id=ticket_id, title="Do the thing", mode=mode)
     return SimpleNamespace(run=run, events=list(events), artifacts=list(artifacts))
 
 
@@ -23,9 +23,10 @@ def test_builder_task_points_at_ticket_file_when_present(tmp_path):
     assert "tickets/SBX-3.md" in task
 
 
-def test_builder_task_unchanged_without_ticket_file(tmp_path):
+def test_builder_task_has_no_spec_pointer_without_a_ticket_file(tmp_path):
     task = _task_for(_detail(), "builder", str(tmp_path))
-    assert task == "Implement SBX-3: Do the thing."
+    assert task.startswith("Implement SBX-3: Do the thing.")
+    assert "specification is in" not in task
 
 
 def test_reviewer_task_points_at_ticket_file_when_present(tmp_path):

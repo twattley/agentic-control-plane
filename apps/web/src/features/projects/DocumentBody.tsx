@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 /** Markdown stays the source of truth — humans, agents and git all read it.
  * This renders the contract's known sections as UI so a story reads as a card
@@ -51,7 +52,9 @@ function Prose({ children }: { children: string }) {
   if (!children.trim()) return null
   return (
     <div className="prose prose-sm prose-slate max-w-none overflow-x-auto">
-      <ReactMarkdown>{children}</ReactMarkdown>
+      {/* GFM is what makes the evidence case table render as a table rather
+        * than a run of pipe-delimited prose. */}
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
     </div>
   )
 }

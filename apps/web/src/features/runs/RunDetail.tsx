@@ -1,6 +1,9 @@
-import type { Artifact, Event, RunDetail as RunDetailData } from '@agentic-control-plane/domain-types'
+import type {
+  Artifact, ArtifactKind, Event, RunDetail as RunDetailData,
+} from '@agentic-control-plane/domain-types'
 import { Link, useParams } from 'react-router-dom'
 import { useDecide, useDispatch, usePostEvent, useRun } from '../../api/hooks'
+import { DocumentBody } from '../projects/DocumentBody'
 import { DiffView } from './DiffView'
 import { StateBadge } from './StateBadge'
 
@@ -16,8 +19,8 @@ function latest(events: Event[], type: string): Event | undefined {
   return [...events].reverse().find((e) => e.type === type)
 }
 
-function latestDiff(artifacts: Artifact[]): Artifact | undefined {
-  return [...artifacts].reverse().find((a) => a.kind === 'diff')
+function latestArtifact(artifacts: Artifact[], kind: ArtifactKind): Artifact | undefined {
+  return [...artifacts].reverse().find((a) => a.kind === kind)
 }
 
 function ReRunButton({ id }: { id: number }) {
@@ -119,7 +122,8 @@ export function RunDetailPage() {
   const { run, events, artifacts } = data
   const brief = latest(events, 'builder_brief_posted')
   const findings = latest(events, 'reviewer_findings_posted')
-  const diff = latestDiff(artifacts)
+  const diff = latestArtifact(artifacts, 'diff')
+  const evidence = latestArtifact(artifacts, 'evidence')
 
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col">
@@ -151,6 +155,14 @@ export function RunDetailPage() {
           <Panel title="Builder brief">
             <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
               {payloadText(brief) || <span className="text-slate-400">no detail</span>}
+            </div>
+          </Panel>
+        )}
+
+        {evidence && (
+          <Panel title="Evidence">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <DocumentBody content={evidence.content} />
             </div>
           </Panel>
         )}

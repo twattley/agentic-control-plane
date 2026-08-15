@@ -15,7 +15,9 @@ export type RunState =
   | 'blocked'
 
 export type Role = 'builder' | 'reviewer' | 'human'
-export type ArtifactKind = 'diff' | 'test_output' | 'screenshot' | 'log'
+/** `evidence` is optional markdown a builder leaves to demonstrate the outcome
+ * — a case table of real inputs and actual outputs. */
+export type ArtifactKind = 'diff' | 'test_output' | 'screenshot' | 'log' | 'evidence'
 export type Decision = 'approve' | 'request_changes' | 'block' | 'close'
 export type QueueName = 'review' | 'fix' | 'human'
 

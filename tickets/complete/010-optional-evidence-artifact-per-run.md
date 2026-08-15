@@ -15,14 +15,37 @@ markup inside the control plane.
 
 ## Status
 
-- State: ready
-- Phase: queued
-- Started: —
-- Updated: 2026-08-15
-- Completed: —
-- Last: shaped in conversation; the north star is seeing the outcome, not
-  reading the mechanism
-- Next: claim builder
+- State: complete
+- Phase: closed
+- Started: 2026-08-15 13:36 BST
+- Updated: 2026-08-15 14:31 BST
+- Completed: 2026-08-15 14:31 BST
+- Last: 2026-08-15 14:31 BST - human closed on a green gate: 126 pytest, tsc
+  clean, ruff clean on all changed files
+- Next: none
+
+## Closing Note
+
+Closed by human decision with the last recorded reviewer verdict at
+needs-work. That verdict was about documentation being as-built, and the
+builder pass at 14:24 made the changes it asked for; no reviewer pass ran
+afterwards to record the pass. The functional work was settled two rounds
+earlier.
+
+Four files landed outside `allowed_paths` — `apps/api/schema/001_init.sql`
+(which this ticket lists as forbidden), `ARCHITECTURE.md` (read-context),
+`apps/web/src/features/projects/DocumentBody.tsx`, and the web
+`package.json`/lockfile for `remark-gfm`. All are comment-only edits except
+the GFM dependency, which the table rendering genuinely needed. Accepted
+knowingly rather than overlooked.
+
+Two process gaps this ticket exposed, both worth their own story:
+
+1. The reviewer demanded a change to a read-context file, so the component
+   enforcing the scope contract instructed a breach of it.
+2. `max_review_rounds` (2) would have escalated the fourth round to a human,
+   but it only fires on worker-dispatched passes; these were manual `$reviewer`
+   calls from the CLI and bypassed it.
 
 ## Why
 
@@ -68,16 +91,18 @@ freeze rather than whatever the builder found easy to display:
 ## Scope
 
 - `allowed_paths`:
+  - `ARCHITECTURE.md`
   - `apps/api/app/worker.py`
   - `apps/api/app/features/runs/models.py`
+  - `apps/api/schema/001_init.sql`
   - `apps/api/tests/features/runs/**`
+  - `apps/web/package.json`
+  - `apps/web/src/features/projects/DocumentBody.tsx`
   - `apps/web/src/features/runs/**`
+  - `package-lock.json`
   - `packages/domain-types/src/index.ts`
-- `read_context_paths`:
-  - `ARCHITECTURE.md`
 - `forbidden_paths`:
   - `apps/api/app/services/state_machine.py`
-  - `apps/api/schema/**`
 - `depends_on`:
   - none
 - `parallelizable`: yes

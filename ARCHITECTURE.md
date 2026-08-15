@@ -27,7 +27,7 @@ bounded timeout. Registered checkout paths are therefore a trust boundary.
 | `repos` | Registered repositories (`slug`, `name`, local `path`) a run belongs to |
 | `runs` | A unit of work + its current `state`; the run is the workflow aggregate |
 | `events` | Append-only log of everything that happened on a run — the source of truth |
-| `artifacts` | Attached outputs: `diff`, `test_output`, `screenshot`, `log` |
+| `artifacts` | Attached outputs: `diff`, `test_output`, `screenshot`, `log`, `evidence` |
 | `leases` | Role locks — at most one active (`released_at IS NULL`) lease per run+role |
 | `decisions` | Human decisions: `approve`, `request_changes`, `block`, `close` |
 | `discussions` + `discussion_messages` | Ticket-shaping chats (pre-freeze strands); `session_id` is the claude CLI conversation handle |

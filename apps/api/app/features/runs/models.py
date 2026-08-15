@@ -1,6 +1,11 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# Mirrored by ArtifactKind in packages/domain-types. `evidence` is optional
+# markdown a builder leaves to demonstrate the outcome.
+ArtifactKind = Literal["diff", "test_output", "screenshot", "log", "evidence"]
 
 
 class RunIn(BaseModel):
@@ -48,14 +53,14 @@ class Event(BaseModel):
 
 
 class ArtifactIn(BaseModel):
-    kind: str          # diff | test_output | screenshot | log
+    kind: ArtifactKind
     content: str
 
 
 class Artifact(BaseModel):
     id: int
     run_id: int
-    kind: str
+    kind: ArtifactKind
     content: str
     created_at: datetime
 

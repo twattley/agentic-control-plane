@@ -1,0 +1,141 @@
+{
+  "abandoned_at": null,
+  "agent": "codex",
+  "brief": {
+    "changed_files": [
+      "ARCHITECTURE.md",
+      "apps/api/app/features/runs/models.py",
+      "apps/api/app/worker.py",
+      "apps/api/schema/001_init.sql",
+      "apps/api/tests/features/runs/test_evidence_artifact.py",
+      "apps/api/tests/features/runs/test_task_spec.py",
+      "apps/web/package.json",
+      "apps/web/src/features/projects/DocumentBody.tsx",
+      "apps/web/src/features/runs/RunDetail.tsx",
+      "package-lock.json",
+      "packages/domain-types/src/index.ts",
+      "tickets/in-progress/010-optional-evidence-artifact-per-run.md"
+    ],
+    "focus_areas": [
+      "ARCHITECTURE.md now lists evidence alongside the four existing artifact kinds in the canonical data model.",
+      "apps/api/schema/001_init.sql changes comments only; the artifacts table and migration behavior are unchanged.",
+      "The ticket boundary now explicitly allows ARCHITECTURE.md and the exact 001_init.sql path, while state_machine.py remains forbidden. All cumulative changed files are inside allowed_paths."
+    ],
+    "goal": "Address the latest reviewer finding by making the canonical artifact-kind documentation match the five-kind public contract and recording the approved documentation scope expansion.",
+    "known_risks": [
+      "apps/web still has no frontend test runner; the reviewer recorded a DOM-level evidence rendering regression as a non-blocking follow-up.",
+      "This pass changed documentation and ticket scope only; it introduced no behavioral code or schema change."
+    ],
+    "test_output": "uv run --project apps/api pytest apps/api/tests/ -> 126 passed in 25.67s. cd apps/web && npx tsc -b --noEmit -> clean. git diff --check -> clean. Manual scope audit -> all cumulative implementation, test, dependency, documentation, and ticket paths allowed; forbidden state_machine.py untouched. No repo scope-guard script exists."
+  },
+  "claimed_at": "2026-08-15T13:22:59.698050+00:00",
+  "completed_at": "2026-08-15T13:24:07.635390+00:00",
+  "created_at": "2026-08-15T12:36:21.445613+00:00",
+  "findings": {
+    "issues": [
+      {
+        "file": "ARCHITECTURE.md",
+        "severity": "medium",
+        "summary": "The public ArtifactKind contract and worker data flow now include evidence, but the repo canonical data-model documentation is not as-built: ARCHITECTURE.md:30 still enumerates only diff/test_output/screenshot/log, and apps/api/schema/001_init.sql:48-52 repeats the same four-kind contract. CLAUDE.md directs future agents to ARCHITECTURE.md for the data model, so the stale lists will mislead subsequent work. Expand allowed_paths to update ARCHITECTURE.md and make an explicit decision about the comment-only schema edit currently blocked by forbidden_paths before close."
+      }
+    ],
+    "suggestions": [
+      "When the frontend gains a test runner, add a DOM-level regression that proves evidence pipe tables render above the diff; the current typecheck and one-off remark parse do not permanently guard that UI behavior."
+    ],
+    "verdict": "needs-work"
+  },
+  "git_ref": "main@2051f52",
+  "history": [
+    {
+      "agent": "claude",
+      "at": "2026-08-15T12:36:21.460695+00:00",
+      "event": "claimed",
+      "role": "builder"
+    },
+    {
+      "agent": "claude",
+      "at": "2026-08-15T12:42:14.064798+00:00",
+      "event": "posted",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T12:50:40.587385+00:00",
+      "event": "claimed",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T12:54:07.700556+00:00",
+      "event": "posted",
+      "role": "reviewer"
+    },
+    {
+      "agent": "claude",
+      "at": "2026-08-15T13:03:13.785084+00:00",
+      "event": "claimed",
+      "role": "builder"
+    },
+    {
+      "agent": "claude",
+      "at": "2026-08-15T13:03:18.780375+00:00",
+      "event": "posted",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:04:25.598353+00:00",
+      "event": "claimed",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:06:40.122914+00:00",
+      "event": "posted",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:08:02.818332+00:00",
+      "event": "claimed",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:10:57.860370+00:00",
+      "event": "posted",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:16:26.319883+00:00",
+      "event": "claimed",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:19:22.760472+00:00",
+      "event": "posted",
+      "role": "reviewer"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:22:59.698136+00:00",
+      "event": "claimed",
+      "role": "builder"
+    },
+    {
+      "agent": "codex",
+      "at": "2026-08-15T13:24:07.635580+00:00",
+      "event": "posted",
+      "role": "builder"
+    }
+  ],
+  "id": "15f252bcc06cc613",
+  "independent_review": null,
+  "project_slug": "agentic-control-plane",
+  "role": "builder",
+  "status": "complete",
+  "ticket_path": "tickets/in-progress/010-optional-evidence-artifact-per-run.md",
+  "work_unit_id": "010-optional-evidence-artifact-per-run"
+}

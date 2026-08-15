@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import urllib.request
+from pathlib import Path
 
 import asyncpg
 
@@ -61,9 +62,47 @@ def _agent_command(role: str, provider: str, task: str, repo_path: str) -> list[
     raise ValueError(f"unknown provider: {provider}")
 
 
+ARTIFACT_DIR = ".agent-artifacts"
+
+
+def _capture_evidence(repo_path: str, run_id: int) -> str | None:
+    """Take the builder's optional markdown evidence out of the checkout.
+
+    Removing the file is part of capturing it: evidence belongs to the run, not
+    to the repository. Removal is the tidy path, not the guarantee — a pass that
+    crashes between write and capture leaves the file behind, so `_stage_all`
+    holds the invariant that evidence never reaches a diff or a commit.
+    """
+    path = Path(repo_path) / ARTIFACT_DIR / f"{run_id}.md"
+    if not path.is_file():
+        return None
+    content = path.read_text()
+    path.unlink()
+    return content
+
+
+def _stage_all(repo_path: str) -> None:
+    """Stage everything the agent touched, except the artifact directory.
+
+    Every `git add -A` in the pipeline goes through here. The exclusion is what
+    keeps evidence — this run's or a crashed earlier run's — out of the diff the
+    reviewer reads and out of the commit the closer writes. Resetting the path
+    first also removes evidence that the agent staged before returning; a
+    negative pathspec alone does not change entries already in the index.
+    """
+    subprocess.run(
+        ["git", "-C", repo_path, "reset", "--quiet", "--", ARTIFACT_DIR],
+        check=False,
+    )
+    subprocess.run(
+        ["git", "-C", repo_path, "add", "-A", "--", ".", f":(exclude){ARTIFACT_DIR}"],
+        check=False,
+    )
+
+
 def _git_diff(repo_path: str) -> str:
     """Stage everything the agent touched and return the unified diff."""
-    subprocess.run(["git", "-C", repo_path, "add", "-A"], check=False)
+    _stage_all(repo_path)
     out = subprocess.run(
         ["git", "-C", repo_path, "diff", "--cached"],
         cwd=repo_path, capture_output=True, text=True, check=False,
@@ -102,9 +141,16 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         or f"{provider} {role} pass complete"
 
     if role == "builder":
+        # Capture first for a tidy checkout. `_stage_all` separately protects
+        # the index from stale or already-staged artifact files.
+        evidence = _capture_evidence(repo.path, run_id)
         diff = _git_diff(repo.path)
         if diff.strip():
             await runs_service.attach_artifact(pool, run_id, ArtifactIn(kind="diff", content=diff))
+        if evidence:
+            await runs_service.attach_artifact(
+                pool, run_id, ArtifactIn(kind="evidence", content=evidence)
+            )
         await runs_service.record_event(
             pool, run_id,
             EventIn(type="builder_brief_posted", actor="builder",
@@ -152,7 +198,7 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
             (gate.stdout + gate.stderr).strip()[:500] or "gate command failed",
         )
 
-    subprocess.run(["git", "-C", repo.path, "add", "-A"], check=False)
+    _stage_all(repo.path)
     commit = subprocess.run(
         ["git", "-C", repo.path,
          "-c", "user.email=agent@control-plane", "-c", "user.name=agentic-control-plane",
@@ -215,17 +261,47 @@ def _task_for(detail, role: str, repo_path: str) -> str:
             "Assess correctness and safety. End your reply with exactly one line: "
             "'VERDICT: pass' if it correctly and safely implements the task, or "
             "'VERDICT: changes' followed by what must be fixed.\n\n"
-            f"DIFF:\n{diff}"
+            f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
     findings = next((e for e in reversed(detail.events)
                      if e.type == "reviewer_findings_posted"), None)
+    evidence = _evidence_invitation(run.id)
     if findings:
         return (f"Address the reviewer findings on {run.ticket_id}: {run.title}.{spec} "
-                f"Findings: {findings.payload.get('summary', '')}")
+                f"Findings: {findings.payload.get('summary', '')}{evidence}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
-                "failing test that captures the behaviour, then implement until it passes.")
-    return f"Implement {run.ticket_id}: {run.title}.{spec}"
+                "failing test that captures the behaviour, then implement until it "
+                f"passes.{evidence}")
+    return f"Implement {run.ticket_id}: {run.title}.{spec}{evidence}"
+
+
+def _evidence_invitation(run_id: int) -> str:
+    """Invite evidence; never require it. Work with nothing to demonstrate — a
+    refactor, a rename — writes nothing, and that is a complete pass."""
+    return (
+        " Optional: if this change has a demonstrable outcome, write markdown to "
+        f".agent-artifacts/{run_id}.md — a table of the ticket's scenarios with real "
+        "inputs and the ACTUAL outputs you got from running the code, never claims "
+        "about what it would do. Write nothing if there is nothing to demonstrate "
+        "— that is still a complete pass."
+    )
+
+
+def _evidence_review_note(detail) -> str:
+    """Show the reviewer the builder's evidence, and tell it what would make the
+    evidence worthless."""
+    evidence = next(
+        (a.content for a in reversed(detail.artifacts) if a.kind == "evidence"), ""
+    )
+    if not evidence:
+        return ""
+    return (
+        "\n\nEVIDENCE the builder attached — a case table it claims to have run. "
+        "Check it against the diff: if the cases could not have been run, or the "
+        "outputs contradict the code, that is 'VERDICT: changes'.\n"
+        f"{evidence}"
+    )
 
 
 def _spec_note(repo_path: str, ticket_id: str) -> str:
