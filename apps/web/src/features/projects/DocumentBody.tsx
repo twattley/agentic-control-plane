@@ -5,6 +5,15 @@ import remarkGfm from 'remark-gfm'
  * This renders the contract's known sections as UI so a story reads as a card
  * instead of a wall of text. Unknown sections fall through as prose. */
 
+/** Sections written for the agent, not for the person deciding what to work
+ * on. They are the contract the builder is held to — exact paths, commands,
+ * interfaces — and they are noise when you are reading to understand the
+ * problem. Kept one tap away, never deleted. */
+const AGENT_SECTIONS = new Set([
+  'scope', 'validation', 'public interface', 'scenarios', 'stories',
+  'technical notes', 'evidence',
+])
+
 interface Section {
   heading: string
   body: string
@@ -46,6 +55,20 @@ function statusPairs(body: string): [string, string][] {
     .map((line) => /^\s*-\s*([A-Za-z ]+):\s*(.*)$/.exec(line))
     .filter((m): m is RegExpExecArray => m !== null && m[2].trim() !== '' && m[2].trim() !== '—')
     .map((m) => [m[1].trim(), m[2].trim()])
+}
+
+/** A word on what is inside a collapsed section, so it can be skipped without
+ * being opened. */
+function hint(name: string, body: string): string {
+  if (name === 'scenarios') {
+    const n = (body.match(/^###\s/gm) ?? []).length
+    return n ? `${n} case${n === 1 ? '' : 's'}` : ''
+  }
+  if (name === 'scope') {
+    const n = (body.match(/^\s+-\s/gm) ?? []).length
+    return n ? `${n} path${n === 1 ? '' : 's'}` : ''
+  }
+  return ''
 }
 
 function Prose({ children }: { children: string }) {
@@ -111,6 +134,23 @@ function SectionBlock({ section }: { section: Section }) {
           </div>
         ))}
       </div>
+    )
+  }
+
+  if (AGENT_SECTIONS.has(name)) {
+    return (
+      <details className="group rounded border border-slate-100 bg-slate-50/60">
+        <summary className="cursor-pointer list-none px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 active:bg-slate-100">
+          <span className="mr-1 inline-block group-open:rotate-90">▸</span>
+          {section.heading}
+          <span className="ml-1 font-normal normal-case tracking-normal text-slate-300">
+            {hint(name, section.body)}
+          </span>
+        </summary>
+        <div className="px-2 pb-2">
+          <Prose>{section.body}</Prose>
+        </div>
+      </details>
     )
   }
 
