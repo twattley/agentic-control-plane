@@ -60,7 +60,12 @@ def _install_tool(repo, create_exit: int = 0) -> None:
     snapshot = json.dumps({
         "schema_version": "agent-workflow-snapshot-v1",
         "ticket_contract": "epic-story-v1",
-        "epics": [], "legacy": [], "runs": [], "diagnostics": [],
+        "epics": [], "runs": [], "diagnostics": [],
+        "legacy": [{
+            "kind": "legacy", "legacy_id": "old-cleanup",
+            "title": "Clean up the parser", "path": "tickets/old-cleanup.md",
+            "state": None,
+        }],
         "stories": [{
             "kind": "story", "story_id": "E001-S00", "epic_id": "E001",
             "coordination_class": "feature", "state": "backlog",
@@ -183,6 +188,53 @@ async def test_mark_ready_unknown_story_404(db, client, tmp_path):
         f"/api/v1/repos/{repo_id}/workflow/stories/E009-S99/ready", headers=AUTH
     )
     assert resp.status_code == 404
+
+
+async def test_adopt_legacy_ticket_as_story(db, client, tmp_path):
+    """The contract's explicit migration: a human picks the epic, the tool
+    allocates identity, the legacy content becomes the story body, and the
+    legacy file goes away."""
+    _install_tool(tmp_path)
+    legacy = tmp_path / "tickets" / "old-cleanup.md"
+    legacy.parent.mkdir(exist_ok=True)
+    legacy.write_text("# Clean up the parser\n\nDrop the dead branches in the parser.\n")
+    repo_id = await _repo(client, tmp_path)
+
+    resp = await client.post(
+        f"/api/v1/repos/{repo_id}/workflow/stories/adopt",
+        json={"legacy_id": "old-cleanup", "epic_id": "E001", "coordination_class": "feature"},
+        headers=AUTH,
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["story_id"] == "E001-S00"
+    story_text = (tmp_path / "tickets" / "backlog" / "E001-S00-do-a-thing.md").read_text()
+    assert "Drop the dead branches in the parser." in story_text
+    assert "## Identity" in story_text
+    assert not legacy.exists()
+
+
+async def test_adopt_unknown_legacy_404_and_tool_failure_keeps_the_file(db, client, tmp_path):
+    _install_tool(tmp_path, create_exit=1)
+    legacy = tmp_path / "tickets" / "old-cleanup.md"
+    legacy.parent.mkdir(exist_ok=True)
+    legacy.write_text("# Keep me\n")
+    repo_id = await _repo(client, tmp_path)
+
+    resp = await client.post(
+        f"/api/v1/repos/{repo_id}/workflow/stories/adopt",
+        json={"legacy_id": "nope", "epic_id": "E001", "coordination_class": "feature"},
+        headers=AUTH,
+    )
+    assert resp.status_code == 404
+
+    resp = await client.post(
+        f"/api/v1/repos/{repo_id}/workflow/stories/adopt",
+        json={"legacy_id": "old-cleanup", "epic_id": "E001", "coordination_class": "feature"},
+        headers=AUTH,
+    )
+    assert resp.status_code == 502
+    assert legacy.exists()  # nothing lost on failure
 
 
 async def test_freeze_into_a_story(db, client, tmp_path, monkeypatch):

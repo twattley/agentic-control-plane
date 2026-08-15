@@ -6,6 +6,7 @@ from app.features.repos import repository as repos_repo
 from app.features.repos.models import Repo
 from app.features.workflow import repository
 from app.features.workflow.models import (
+    AdoptIn,
     AuthoredStory,
     StoryCreateIn,
     WorkflowDocument,
@@ -51,6 +52,21 @@ async def create_story(repo_id: int, data: StoryCreateIn) -> AuthoredStory:
     repo = await _repo_or_404(repo_id)
     try:
         return repository.create_story(repo.path, data)
+    except repository.WorkflowAuthorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except repository.WorkflowReadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/stories/adopt", status_code=status.HTTP_201_CREATED)
+async def adopt_legacy(repo_id: int, data: AdoptIn) -> AuthoredStory:
+    repo = await _repo_or_404(repo_id)
+    try:
+        return repository.adopt_legacy(
+            repo.path, data.legacy_id, data.epic_id, data.coordination_class
+        )
+    except repository.WorkflowDocumentError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except repository.WorkflowAuthorError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except repository.WorkflowReadError as exc:

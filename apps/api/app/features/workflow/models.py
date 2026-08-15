@@ -100,6 +100,15 @@ class StoryCreateIn(BaseModel):
     body: str | None = None
 
 
+class AdoptIn(BaseModel):
+    """The contract's explicit legacy migration: a human names the legacy
+    ticket and the epic it belongs under; the tool allocates the identity."""
+
+    legacy_id: str
+    epic_id: str
+    coordination_class: CoordinationClass
+
+
 class AuthoredStory(BaseModel):
     story_id: str
     epic_id: str

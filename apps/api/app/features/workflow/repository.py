@@ -158,6 +158,36 @@ def _merge_story_body(skeleton: str, body: str) -> str:
     return head.rstrip() + "\n\n" + content + "\n"
 
 
+def adopt_legacy(
+    repo_path: str, legacy_id: str, epic_id: str, coordination_class: str
+) -> AuthoredStory:
+    """Explicit, human-triggered migration of one legacy ticket into a story.
+    The legacy file is removed only after the story exists — a tool failure
+    loses nothing."""
+    root = Path(repo_path).resolve()
+    workflow = load_workflow(repo_path)
+    item = next((x for x in workflow.legacy if x.legacy_id == legacy_id), None)
+    if item is None:
+        raise WorkflowDocumentError(f"legacy ticket {legacy_id!r} not found")
+    source = _safe_ticket_path(root, item.path)
+    title, body = _split_title(source.read_text(), fallback=item.title)
+
+    authored = create_story(repo_path, StoryCreateIn(
+        epic_id=epic_id, coordination_class=coordination_class,  # type: ignore[arg-type]
+        title=title, body=body or None,
+    ))
+    source.unlink()
+    return authored
+
+
+def _split_title(content: str, fallback: str) -> tuple[str, str]:
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("# "):
+            return line[2:].strip(), "\n".join(lines[i + 1:]).strip()
+    return fallback, content.strip()
+
+
 def mark_ready(repo_path: str, story_id: str) -> AuthoredStory:
     """The backlog -> ready promotion: an atomic move that preserves identity
     and updates the Status block, exactly as the contract prescribes."""

@@ -12,8 +12,9 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import {
-  useCreateRun, useCreateStory, useCreateTicket, useMarkStoryReady, useRepo,
-  useRepoRuns, useTicket, useTickets, useUpdateTicket, useWorkflow, useWorkflowDocument,
+  useAdoptLegacy, useCreateRun, useCreateStory, useCreateTicket, useMarkStoryReady,
+  useRepo, useRepoRuns, useTicket, useTickets, useUpdateTicket, useWorkflow,
+  useWorkflowDocument,
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
@@ -360,6 +361,43 @@ function NewStoryForm({
   )
 }
 
+function AdoptControls({
+  repoId, legacyId, workflow,
+}: { repoId: number; legacyId: string; workflow: WorkflowProjection }) {
+  const adopt = useAdoptLegacy(repoId)
+  const [epicId, setEpicId] = useState(workflow.epics[0]?.epic_id ?? '')
+  const [klass, setKlass] = useState<CoordinationClass>('feature')
+
+  return (
+    <div className="space-y-2 border-t border-slate-100 pt-3">
+      <p className="text-xs text-slate-500">
+        Adopt as a story to make it startable — picks an identity under an epic;
+        the legacy file's content moves in.
+      </p>
+      <div className="flex gap-2">
+        <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
+          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-2 text-sm">
+          {workflow.epics.map((e) => (
+            <option key={e.epic_id} value={e.epic_id}>{e.epic_id} · {e.title}</option>
+          ))}
+        </select>
+        <select value={klass} onChange={(e) => setKlass(e.target.value as CoordinationClass)}
+          className="rounded border border-slate-300 bg-white px-2 py-2 text-sm">
+          {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <button type="button" disabled={adopt.isPending || !epicId}
+          onClick={() => adopt.mutate({
+            legacy_id: legacyId, epic_id: epicId, coordination_class: klass,
+          })}
+          className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-40">
+          {adopt.isPending ? 'adopting…' : 'Adopt as story'}
+        </button>
+      </div>
+      {adopt.error && <p className="text-sm text-red-600">{String(adopt.error)}</p>}
+    </div>
+  )
+}
+
 function WorkflowWorkRow({
   repoId, item, workflow, runs,
 }: {
@@ -432,6 +470,10 @@ function WorkflowWorkRow({
               className="block rounded-lg border border-slate-200 px-4 py-2 text-center text-sm font-medium text-slate-700">
               Control Plane run · {currentRun.state}
             </Link>
+          )}
+          {item.kind === 'legacy' && workflow.ticket_contract === 'epic-story-v1'
+            && workflow.epics.length > 0 && !active && (
+            <AdoptControls repoId={repoId} legacyId={item.legacy_id} workflow={workflow} />
           )}
           {item.kind === 'story' && item.state === 'backlog'
             && item.diagnostic_codes.length === 0 && !active && (

@@ -221,6 +221,13 @@ export interface StoryCreateInput {
   body?: string | null
 }
 
+/** Explicit legacy → story migration. Mirrors AdoptIn. */
+export interface AdoptInput {
+  legacy_id: string
+  epic_id: string
+  coordination_class: CoordinationClass
+}
+
 export interface AuthoredStory {
   story_id: string
   epic_id: string

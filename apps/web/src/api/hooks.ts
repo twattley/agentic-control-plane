@@ -1,4 +1,5 @@
 import type {
+  AdoptInput,
   AuthoredStory,
   BoardPane,
   CoordinationClass,
@@ -139,6 +140,14 @@ export function useCreateStory(repoId: number) {
   return useMutation({
     mutationFn: (body: StoryCreateInput) =>
       apiPost<AuthoredStory>(`/repos/${repoId}/workflow/stories`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', repoId] }),
+  })
+}
+
+export function useAdoptLegacy(repoId: number) {
+  return useMutation({
+    mutationFn: (body: AdoptInput) =>
+      apiPost<AuthoredStory>(`/repos/${repoId}/workflow/stories/adopt`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', repoId] }),
   })
 }
