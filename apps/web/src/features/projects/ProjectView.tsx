@@ -580,15 +580,7 @@ function WorkflowProject({
         </div>
       )}
 
-      {workflow.legacy.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
-          {workflow.legacy.map((item) => (
-            <WorkflowWorkRow key={item.legacy_id} repoId={repoId} item={item}
-              workflow={workflow} runs={runs} />
-          ))}
-        </div>
-      )}
+      <LegacySection repoId={repoId} workflow={workflow} runs={runs} />
 
       {workflow.runs.length > 0 && (
         <div className="space-y-2">
@@ -605,6 +597,45 @@ function WorkflowProject({
         </div>
       )}
     </section>
+  )
+}
+
+function LegacySection({
+  repoId, workflow, runs,
+}: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
+  const [showComplete, setShowComplete] = useState(false)
+  const live = workflow.legacy.filter((item) => item.state !== 'complete')
+  const complete = workflow.legacy.filter((item) => item.state === 'complete')
+  if (!workflow.legacy.length) return null
+
+  return (
+    <div className="space-y-2">
+      {live.length > 0 && (
+        <>
+          <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
+          {live.map((item) => (
+            <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+              workflow={workflow} runs={runs} />
+          ))}
+        </>
+      )}
+      {complete.length > 0 && (
+        <div className="pt-1">
+          <button type="button" onClick={() => setShowComplete(!showComplete)}
+            className="text-sm font-medium text-slate-400">
+            {showComplete ? '▾' : '▸'} Completed history ({complete.length})
+          </button>
+          {showComplete && (
+            <div className="mt-2 space-y-2">
+              {complete.map((item) => (
+                <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+                  workflow={workflow} runs={runs} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
