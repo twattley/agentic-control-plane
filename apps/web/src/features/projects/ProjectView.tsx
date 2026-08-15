@@ -509,6 +509,11 @@ function WorkflowProject({
   const ungrouped = workflow.stories.filter((story) => !knownEpicIds.has(story.epic_id))
   const [shaping, setShaping] = useState(false)
   const [composing, setComposing] = useState(false)
+  const [showLedgerNotes, setShowLedgerNotes] = useState(false)
+  // orphan_run = an old ledger record no longer joining to a current ticket —
+  // history bookkeeping, not a problem with today's work. Everything else is.
+  const ledgerNotes = workflow.diagnostics.filter((d) => d.code === 'orphan_run')
+  const problems = workflow.diagnostics.filter((d) => d.code !== 'orphan_run')
 
   return (
     <section className="space-y-4">
@@ -534,14 +539,31 @@ function WorkflowProject({
         <NewStoryForm repoId={repoId} workflow={workflow}
           onDone={() => setComposing(false)} />
       )}
-      {workflow.diagnostics.length > 0 && (
+      {problems.length > 0 && (
         <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <h2 className="font-semibold text-amber-900">Workflow diagnostics</h2>
-          {workflow.diagnostics.map((diagnostic, index) => (
+          {problems.map((diagnostic, index) => (
             <p key={`${diagnostic.code}-${diagnostic.path}-${index}`} className="text-sm text-amber-800">
               {diagnostic.source} · {diagnostic.code} · {diagnostic.message}
             </p>
           ))}
+        </div>
+      )}
+      {ledgerNotes.length > 0 && (
+        <div>
+          <button type="button" onClick={() => setShowLedgerNotes(!showLedgerNotes)}
+            className="text-sm font-medium text-slate-400">
+            {showLedgerNotes ? '▾' : '▸'} Ledger history notes ({ledgerNotes.length})
+          </button>
+          {showLedgerNotes && (
+            <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-white p-3">
+              {ledgerNotes.map((diagnostic, index) => (
+                <p key={`${diagnostic.path}-${index}`} className="text-xs text-slate-500">
+                  {diagnostic.message}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -627,20 +649,51 @@ function EpicCard({
   )
 }
 
+// Mirror of the backend's tickets-vs-docs rule: all-caps single words and
+// these prefixes are reference material, not work.
+const DOC_PREFIXES = ['handoff-', 'plan-', 're-fresh-', 'refresh-', 'human-', 'notes-']
+function isDocStem(stem: string): boolean {
+  return /^[A-Z]+$/.test(stem)
+    || DOC_PREFIXES.some((p) => stem.toLowerCase().startsWith(p))
+}
+
 function LegacySection({
   repoId, workflow, runs,
 }: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
-  // Completed history stays in the repo, not on screen.
+  const [showDocs, setShowDocs] = useState(false)
+  // Completed history stays in the repo, not on screen; reference docs collapse.
   const live = workflow.legacy.filter((item) => item.state !== 'complete')
+  const work = live.filter((item) => !isDocStem(item.legacy_id))
+  const docs = live.filter((item) => isDocStem(item.legacy_id))
   if (!live.length) return null
 
   return (
     <div className="space-y-2">
-      <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
-      {live.map((item) => (
-        <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
-          workflow={workflow} runs={runs} />
-      ))}
+      {work.length > 0 && (
+        <>
+          <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
+          {work.map((item) => (
+            <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+              workflow={workflow} runs={runs} />
+          ))}
+        </>
+      )}
+      {docs.length > 0 && (
+        <div className="pt-1">
+          <button type="button" onClick={() => setShowDocs(!showDocs)}
+            className="text-sm font-medium text-slate-400">
+            {showDocs ? '▾' : '▸'} Reference docs ({docs.length})
+          </button>
+          {showDocs && (
+            <div className="mt-2 space-y-2">
+              {docs.map((item) => (
+                <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+                  workflow={workflow} runs={runs} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
