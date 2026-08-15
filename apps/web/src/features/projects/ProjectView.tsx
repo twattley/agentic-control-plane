@@ -547,27 +547,10 @@ function WorkflowProject({
 
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-800">Epics</h2>
-        {workflow.epics.map((epic) => {
-          const stories = workflow.stories.filter((story) => story.epic_id === epic.epic_id)
-          return (
-            <div key={epic.epic_id} className="space-y-2 rounded-xl border border-slate-300 bg-slate-50 p-3">
-              <div className="flex items-baseline justify-between gap-3 px-1">
-                <div>
-                  <h3 className="font-semibold text-slate-900">{epic.title}</h3>
-                  <p className="text-xs text-slate-500">{epic.epic_id} · outcome, not startable</p>
-                </div>
-                <span className="text-xs text-slate-500">
-                  {epic.story_counts.complete ?? 0}/{epic.story_counts.total ?? 0} complete
-                </span>
-              </div>
-              {!stories.length && <p className="px-1 text-sm text-slate-400">no stories yet</p>}
-              {stories.map((story) => (
-                <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
-                  workflow={workflow} runs={runs} />
-              ))}
-            </div>
-          )
-        })}
+        {workflow.epics.map((epic) => (
+          <EpicCard key={epic.epic_id} repoId={repoId} epic={epic}
+            workflow={workflow} runs={runs} />
+        ))}
       </div>
 
       {ungrouped.length > 0 && (
@@ -600,41 +583,64 @@ function WorkflowProject({
   )
 }
 
+function EpicCard({
+  repoId, epic, workflow, runs,
+}: {
+  repoId: number
+  epic: WorkflowProjection['epics'][number]
+  workflow: WorkflowProjection
+  runs: Run[]
+}) {
+  const [open, setOpen] = useState(false)
+  const stories = workflow.stories.filter((story) => story.epic_id === epic.epic_id)
+  const activeCount = stories.filter((s) => s.state === 'in-progress').length
+
+  return (
+    <div className="rounded-xl border border-slate-300 bg-slate-50">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
+        <div className="min-w-0">
+          <h3 className="truncate font-semibold text-slate-900">{epic.title}</h3>
+          <p className="text-xs text-slate-500">
+            {epic.epic_id} · {stories.length} {stories.length === 1 ? 'story' : 'stories'}
+            {activeCount > 0 && ` · ${activeCount} in progress`}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">
+            {epic.story_counts.complete ?? 0}/{epic.story_counts.total ?? 0} complete
+          </span>
+          <span className="text-slate-400">{open ? '▾' : '▸'}</span>
+        </div>
+      </button>
+
+      {open && (
+        <div className="space-y-2 border-l-2 border-slate-300 px-3 pb-3 ml-4 mr-1">
+          {!stories.length && <p className="px-1 text-sm text-slate-400">no stories yet</p>}
+          {stories.map((story) => (
+            <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
+              workflow={workflow} runs={runs} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LegacySection({
   repoId, workflow, runs,
 }: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
-  const [showComplete, setShowComplete] = useState(false)
+  // Completed history stays in the repo, not on screen.
   const live = workflow.legacy.filter((item) => item.state !== 'complete')
-  const complete = workflow.legacy.filter((item) => item.state === 'complete')
-  if (!workflow.legacy.length) return null
+  if (!live.length) return null
 
   return (
     <div className="space-y-2">
-      {live.length > 0 && (
-        <>
-          <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
-          {live.map((item) => (
-            <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
-              workflow={workflow} runs={runs} />
-          ))}
-        </>
-      )}
-      {complete.length > 0 && (
-        <div className="pt-1">
-          <button type="button" onClick={() => setShowComplete(!showComplete)}
-            className="text-sm font-medium text-slate-400">
-            {showComplete ? '▾' : '▸'} Completed history ({complete.length})
-          </button>
-          {showComplete && (
-            <div className="mt-2 space-y-2">
-              {complete.map((item) => (
-                <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
-                  workflow={workflow} runs={runs} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <h2 className="text-lg font-semibold text-slate-800">Legacy work</h2>
+      {live.map((item) => (
+        <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+          workflow={workflow} runs={runs} />
+      ))}
     </div>
   )
 }
