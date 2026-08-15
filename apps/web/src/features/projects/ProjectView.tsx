@@ -513,7 +513,12 @@ function WorkflowProject({
   repoId, workflow, runs,
 }: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
   const knownEpicIds = new Set(workflow.epics.map((epic) => epic.epic_id))
-  const ungrouped = workflow.stories.filter((story) => !knownEpicIds.has(story.epic_id))
+  // A standalone story has no parent by design; an orphan has one that doesn't
+  // exist. Same shape on screen, but only the second is a problem.
+  const standalone = workflow.stories.filter((story) => story.epic_id === null)
+  const orphaned = workflow.stories.filter(
+    (story) => story.epic_id !== null && !knownEpicIds.has(story.epic_id),
+  )
   const [shaping, setShaping] = useState(false)
   const [composing, setComposing] = useState(false)
   const [showLedgerNotes, setShowLedgerNotes] = useState(false)
@@ -586,10 +591,26 @@ function WorkflowProject({
             ))}
           </div>
 
-          {ungrouped.length > 0 && (
+          {standalone.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-slate-800">Standalone</h2>
+              <p className="text-xs text-slate-500">
+                Quick work that doesn’t belong under an epic.
+              </p>
+              {standalone.map((story) => (
+                <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
+                  workflow={workflow} runs={runs} />
+              ))}
+            </div>
+          )}
+
+          {orphaned.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-lg font-semibold text-slate-800">Ungrouped stories</h2>
-              {ungrouped.map((story) => (
+              <p className="text-xs text-amber-700">
+                These name an epic that doesn’t exist.
+              </p>
+              {orphaned.map((story) => (
                 <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
                   workflow={workflow} runs={runs} />
               ))}

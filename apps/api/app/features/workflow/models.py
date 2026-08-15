@@ -1,8 +1,14 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CoordinationClass = Literal["contract", "platform", "feature", "validation"]
+
+# v2 adds standalone stories: `epic_id` becomes nullable. Both versions are
+# read, so the portable tool can flip its emitter without blanking every
+# project page in every repo that has it installed.
+SchemaVersion = Literal["agent-workflow-snapshot-v1", "agent-workflow-snapshot-v2"]
+STANDALONE_SCHEMA = "agent-workflow-snapshot-v2"
 
 
 class SnapshotRecord(BaseModel):
@@ -21,7 +27,9 @@ class WorkflowEpic(SnapshotRecord):
 class WorkflowStory(SnapshotRecord):
     kind: Literal["story"]
     story_id: str
-    epic_id: str
+    #: None means a standalone story — first-class, with no parent epic.
+    #: Only legal from v2; `WorkflowSnapshot` enforces that.
+    epic_id: str | None
     coordination_class: str
     state: str
     title: str
@@ -67,7 +75,7 @@ class WorkflowDiagnostic(SnapshotRecord):
 class WorkflowSnapshot(BaseModel):
     model_config = ConfigDict(strict=True)
 
-    schema_version: Literal["agent-workflow-snapshot-v1"]
+    schema_version: SchemaVersion
     ticket_contract: Literal["epic-story-v1"] | None
     epics: list[WorkflowEpic]
     stories: list[WorkflowStory]
@@ -75,10 +83,23 @@ class WorkflowSnapshot(BaseModel):
     runs: list[WorkflowRun]
     diagnostics: list[WorkflowDiagnostic]
 
+    @model_validator(mode="after")
+    def _standalone_stories_need_v2(self):
+        """Reading v2 must not quietly relax v1: under v1 a story with no
+        parent epic is malformed, not standalone."""
+        if self.schema_version == STANDALONE_SCHEMA:
+            return self
+        orphans = [s.story_id for s in self.stories if s.epic_id is None]
+        if orphans:
+            raise ValueError(
+                f"stories without a parent epic need {STANDALONE_SCHEMA}: {orphans}"
+            )
+        return self
+
 
 class WorkflowProjection(WorkflowSnapshot):
-    source: Literal["agent-workflow-snapshot-v1", "legacy-flat"]
-    schema_version: Literal["agent-workflow-snapshot-v1"] | None
+    source: SchemaVersion | Literal["legacy-flat"]
+    schema_version: SchemaVersion | None
 
 
 class WorkflowDocument(BaseModel):

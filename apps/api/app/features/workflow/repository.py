@@ -3,12 +3,14 @@ import re
 import subprocess
 from datetime import date
 from pathlib import Path
+from typing import get_args
 
 from pydantic import ValidationError
 
 from app.features.tickets.repository import list_tickets, ticket_summary
 from app.features.workflow.models import (
     AuthoredStory,
+    SchemaVersion,
     StoryCreateIn,
     WorkflowDocument,
     WorkflowLegacy,
@@ -16,7 +18,9 @@ from app.features.workflow.models import (
     WorkflowSnapshot,
 )
 
-_SCHEMA_VERSION = "agent-workflow-snapshot-v1"
+# Both are read so the portable tool can flip its emitter without taking
+# every project page down while consumers catch up.
+_SCHEMA_VERSIONS = get_args(SchemaVersion)
 _TIMEOUT_SECONDS = 5
 
 
@@ -56,7 +60,7 @@ def load_workflow(repo_path: str) -> WorkflowProjection:
         raise WorkflowReadError("workflow snapshot emitted invalid JSON") from exc
     if not isinstance(raw, dict):
         raise WorkflowReadError("workflow snapshot must be a JSON object")
-    if raw.get("schema_version") != _SCHEMA_VERSION:
+    if raw.get("schema_version") not in _SCHEMA_VERSIONS:
         raise WorkflowReadError(
             f"unsupported workflow schema: {raw.get('schema_version')!r}"
         )
@@ -66,7 +70,7 @@ def load_workflow(repo_path: str) -> WorkflowProjection:
     except ValidationError as exc:
         raise WorkflowReadError(f"invalid workflow snapshot: {exc}") from exc
     return WorkflowProjection(
-        source=_SCHEMA_VERSION,
+        source=snapshot.schema_version,
         **snapshot.model_dump(),
     )
 

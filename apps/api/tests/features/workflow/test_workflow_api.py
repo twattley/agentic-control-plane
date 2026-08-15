@@ -150,6 +150,55 @@ async def test_exact_snapshot_is_preserved_by_authenticated_workflow_route(clien
     assert response.json() == {"source": "agent-workflow-snapshot-v1", **snapshot}
 
 
+async def test_v2_snapshot_without_standalone_stories_reads_unchanged(client, tmp_path):
+    """The version bump alone must not break an existing reader. This is the
+    case that lets agentic-engineering flip its emitter without blanking every
+    project page in every repo that has the portable tool installed."""
+    snapshot = _snapshot(
+        schema_version="agent-workflow-snapshot-v2", stories=[_story()],
+    )
+    _install_snapshot(tmp_path, snapshot)
+    repo_id = await _register(client, str(tmp_path))
+
+    response = await client.get(f"/api/v1/repos/{repo_id}/workflow", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == {"source": "agent-workflow-snapshot-v2", **snapshot}
+
+
+async def test_v2_standalone_story_has_no_parent_epic(client, tmp_path):
+    """A standalone story is a first-class story with no epic. `epic_id` is
+    null, and that must survive the read rather than be invented into a
+    parent."""
+    snapshot = _snapshot(
+        schema_version="agent-workflow-snapshot-v2",
+        stories=[_story(story_id="S001", epic_id=None,
+                        path="tickets/ready/S001-quick-fix.md")],
+    )
+    _install_snapshot(tmp_path, snapshot)
+    repo_id = await _register(client, str(tmp_path))
+
+    response = await client.get(f"/api/v1/repos/{repo_id}/workflow", headers=AUTH)
+
+    assert response.status_code == 200
+    story = response.json()["stories"][0]
+    assert story["story_id"] == "S001"
+    assert story["epic_id"] is None
+
+
+async def test_v1_still_rejects_a_null_parent_epic(client, tmp_path):
+    """Tolerating v2 must not quietly relax v1. A v1 snapshot claiming a
+    null-parented story is malformed, not standalone."""
+    _install_snapshot(
+        tmp_path, _snapshot(stories=[_story(story_id="S001", epic_id=None)]),
+    )
+    repo_id = await _register(client, str(tmp_path))
+
+    response = await client.get(f"/api/v1/repos/{repo_id}/workflow", headers=AUTH)
+
+    assert response.status_code == 502
+
+
 async def test_nonzero_diagnostic_snapshot_remains_usable(client, tmp_path):
     diagnostic = {
         "source": "ticket",
@@ -193,7 +242,9 @@ def test_adapter_uses_fixed_argv_cwd_timeout_and_no_shell(tmp_path, monkeypatch)
     "stdout",
     [
         "not json",
-        json.dumps(_snapshot(schema_version="agent-workflow-snapshot-v2")),
+        # v3 is the unknown one now: tolerating v2 must not mean tolerating
+        # whatever comes next.
+        json.dumps(_snapshot(schema_version="agent-workflow-snapshot-v3")),
         json.dumps({"schema_version": "agent-workflow-snapshot-v1"}),
         json.dumps(_snapshot(epics=[{
             "kind": "epic",

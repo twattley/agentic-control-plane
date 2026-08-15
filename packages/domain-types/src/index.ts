@@ -144,6 +144,10 @@ export interface TicketUpdateInput {
   content: string
 }
 
+/** v2 adds standalone stories, making `epic_id` nullable. Both are read so
+ * the portable tool can flip its emitter without blanking every project page. */
+export type SchemaVersion = 'agent-workflow-snapshot-v1' | 'agent-workflow-snapshot-v2'
+
 export interface WorkflowEpic {
   kind: 'epic'
   epic_id: string
@@ -156,7 +160,9 @@ export interface WorkflowEpic {
 export interface WorkflowStory {
   kind: 'story'
   story_id: string
-  epic_id: string
+  /** null = a standalone story: first-class, with no parent epic. Only legal
+   * from snapshot v2. */
+  epic_id: string | null
   coordination_class: string
   state: string
   title: string
@@ -194,8 +200,8 @@ export interface WorkflowDiagnostic {
 }
 
 export interface WorkflowProjection {
-  source: 'agent-workflow-snapshot-v1' | 'legacy-flat'
-  schema_version: 'agent-workflow-snapshot-v1' | null
+  source: SchemaVersion | 'legacy-flat'
+  schema_version: SchemaVersion | null
   ticket_contract: 'epic-story-v1' | null
   epics: WorkflowEpic[]
   stories: WorkflowStory[]

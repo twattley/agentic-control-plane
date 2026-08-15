@@ -123,6 +123,41 @@ def test_story_prompt_frames_the_small_goal_inside_the_epic(tmp_path):
         assert "only this story" in task                              # and the boundary
 
 
+def test_standalone_story_prompt_invents_no_epic(tmp_path):
+    """A standalone story has no parent by design. The prompt must say nothing
+    about an epic rather than reach for the nearest one."""
+    story_file = tmp_path / "tickets" / "ready" / "S001-quick-fix.md"
+    story_file.parent.mkdir(parents=True)
+    story_file.write_text("# Quick fix")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    payload = {
+        "schema_version": "agent-workflow-snapshot-v2",
+        "ticket_contract": "epic-story-v1",
+        "epics": [{
+            "kind": "epic", "epic_id": "E001", "title": "Capture every source",
+            "path": "tickets/epics/E001-capture-every-source.md",
+            "story_ids": [], "story_counts": {"total": 0},
+        }],
+        "stories": [{
+            "kind": "story", "story_id": "S001", "epic_id": None,
+            "coordination_class": "feature", "state": "ready",
+            "title": "Quick fix", "path": "tickets/ready/S001-quick-fix.md",
+            "claimable_roles": ["builder"], "diagnostic_codes": [],
+        }],
+        "legacy": [], "runs": [], "diagnostics": [],
+    }
+    command = scripts / "agent_workflow"
+    command.write_text("#!/bin/sh\n" + f"printf '%s\\n' '{json.dumps(payload)}'\n")
+    command.chmod(0o755)
+
+    task = _task_for(_detail(ticket_id="S001"), "builder", str(tmp_path))
+
+    assert "tickets/ready/S001-quick-fix.md" in task  # the story is still found
+    assert "E001" not in task                          # but no parent invented
+    assert "one slice of epic" not in task
+
+
 @pytest.mark.parametrize(
     "stories",
     [
