@@ -240,7 +240,24 @@ def _spec_note(repo_path: str, ticket_id: str) -> str:
         if workflow.source == "legacy-flat":
             return ""
         raise
-    return f" The full specification is in {document.path} — read it first."
+    note = f" The full specification is in {document.path} — read it first."
+    return note + _epic_note(workflow, ticket_id)
+
+
+def _epic_note(workflow, ticket_id: str) -> str:
+    """The point of the epic hierarchy: frame the story's small goal inside the
+    epic's big one, so the agent knows what the slice is FOR — and its boundary."""
+    story = next((s for s in workflow.stories if s.story_id == ticket_id), None)
+    if story is None:
+        return ""
+    epic = next((e for e in workflow.epics if e.epic_id == story.epic_id), None)
+    if epic is None:
+        return ""
+    return (
+        f" This story is one slice of epic {epic.epic_id}: {epic.title} "
+        f"({epic.path}) — read the epic for the broader goal it serves, "
+        "then deliver only this story."
+    )
 
 
 def _log(msg: str) -> None:

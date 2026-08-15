@@ -81,6 +81,47 @@ def test_prompt_follows_stable_identity_to_current_snapshot_locator(tmp_path):
     assert "tickets/E001-S00.md" not in task
 
 
+def test_story_prompt_frames_the_small_goal_inside_the_epic(tmp_path):
+    """The point of the hierarchy: the agent is told the broad outcome (epic)
+    and the slice it must deliver now (story) — and only that slice."""
+    story_file = tmp_path / "tickets" / "ready" / "E001-S02-build-bootstrap.md"
+    story_file.parent.mkdir(parents=True)
+    story_file.write_text("# Build bootstrap")
+    epic_file = tmp_path / "tickets" / "epics" / "E001-capture-every-source.md"
+    epic_file.parent.mkdir(parents=True)
+    epic_file.write_text("# Capture every source")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    payload = {
+        "schema_version": "agent-workflow-snapshot-v1",
+        "ticket_contract": "epic-story-v1",
+        "epics": [{
+            "kind": "epic", "epic_id": "E001", "title": "Capture every source",
+            "path": "tickets/epics/E001-capture-every-source.md",
+            "story_ids": ["E001-S02"], "story_counts": {"total": 1},
+        }],
+        "stories": [{
+            "kind": "story", "story_id": "E001-S02", "epic_id": "E001",
+            "coordination_class": "feature", "state": "ready",
+            "title": "Build bootstrap", "path": "tickets/ready/E001-S02-build-bootstrap.md",
+            "claimable_roles": ["builder"], "diagnostic_codes": [],
+        }],
+        "legacy": [], "runs": [], "diagnostics": [],
+    }
+    command = scripts / "agent_workflow"
+    command.write_text("#!/bin/sh\n" + f"printf '%s\\n' '{json.dumps(payload)}'\n")
+    command.chmod(0o755)
+
+    builder_task = _task_for(_detail(ticket_id="E001-S02"), "builder", str(tmp_path))
+    reviewer_task = _task_for(_detail(ticket_id="E001-S02"), "reviewer", str(tmp_path))
+
+    for task in (builder_task, reviewer_task):
+        assert "tickets/ready/E001-S02-build-bootstrap.md" in task   # the small goal
+        assert "E001: Capture every source" in task                   # the big goal
+        assert "tickets/epics/E001-capture-every-source.md" in task   # where to read it
+        assert "only this story" in task                              # and the boundary
+
+
 @pytest.mark.parametrize(
     "stories",
     [
