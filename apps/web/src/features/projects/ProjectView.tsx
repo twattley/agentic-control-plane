@@ -511,10 +511,6 @@ function WorkflowProject({
   const [composing, setComposing] = useState(false)
   const [showLedgerNotes, setShowLedgerNotes] = useState(false)
   const [view, setView] = useState<'epics' | 'board'>('epics')
-  // orphan_run = an old ledger record no longer joining to a current ticket —
-  // history bookkeeping, not a problem with today's work. Everything else is.
-  const ledgerNotes = workflow.diagnostics.filter((d) => d.code === 'orphan_run')
-  const problems = workflow.diagnostics.filter((d) => d.code !== 'orphan_run')
 
   return (
     <section className="space-y-4">
@@ -552,27 +548,17 @@ function WorkflowProject({
         <NewStoryForm repoId={repoId} workflow={workflow}
           onDone={() => setComposing(false)} />
       )}
-      {problems.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <h2 className="font-semibold text-amber-900">Workflow diagnostics</h2>
-          {problems.map((diagnostic, index) => (
-            <p key={`${diagnostic.code}-${diagnostic.path}-${index}`} className="text-sm text-amber-800">
-              {diagnostic.source} · {diagnostic.code} · {diagnostic.message}
-            </p>
-          ))}
-        </div>
-      )}
-      {ledgerNotes.length > 0 && (
+      {workflow.diagnostics.length > 0 && (
         <div>
           <button type="button" onClick={() => setShowLedgerNotes(!showLedgerNotes)}
             className="text-sm font-medium text-slate-400">
-            {showLedgerNotes ? '▾' : '▸'} Ledger history notes ({ledgerNotes.length})
+            {showLedgerNotes ? '▾' : '▸'} Files needing a look ({workflow.diagnostics.length})
           </button>
           {showLedgerNotes && (
             <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-white p-3">
-              {ledgerNotes.map((diagnostic, index) => (
+              {workflow.diagnostics.map((diagnostic, index) => (
                 <p key={`${diagnostic.path}-${index}`} className="text-xs text-slate-500">
-                  {diagnostic.message}
+                  {plainDiagnostic(diagnostic.code)} — {diagnostic.path}
                 </p>
               ))}
             </div>
@@ -607,26 +593,26 @@ function WorkflowProject({
         </>
       )}
 
-      {workflow.runs.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-slate-800">Portable handoffs</h2>
-          {workflow.runs.map((run) => (
-            <div key={run.id} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div className="font-medium text-slate-900">{run.work_unit_id}</div>
-              <div className="text-sm text-slate-500">
-                portable handoff · {run.role} · {run.status}
-                {run.ticket_kind === null && ' · orphan'}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </section>
   )
 }
 
-// Lifecycle lanes, left to right. `complete` is deliberately absent — finished
-// work leaves the board.
+// Diagnostic codes are the tool's vocabulary; this is yours.
+const DIAGNOSTIC_TEXT: Record<string, string> = {
+  orphan_run: 'an old agent run whose ticket has since moved',
+  invalid_story_id: "story id doesn't match the contract",
+  missing_parent_epic: 'names an epic that no longer exists',
+  identity_metadata_mismatch: 'identity block disagrees with itself',
+  identity_path_mismatch: "filename doesn't match the story id",
+  duplicate_story_id: 'two files claim the same story id',
+}
+
+function plainDiagnostic(code: string): string {
+  return DIAGNOSTIC_TEXT[code] ?? code.split('_').join(' ')
+}
+
+// Lifecycle lanes. `complete` is deliberately absent — finished work leaves
+// the board.
 const LANES = ['backlog', 'ready', 'in-progress', 'blocked'] as const
 const LANE_LABEL: Record<(typeof LANES)[number], string> = {
   backlog: 'Backlog',
@@ -643,30 +629,29 @@ function StoryBoard({
   runs: Run[]
   items: (WorkflowStory | WorkflowLegacy)[]
 }) {
+  // One lane at a time, chosen from a dropdown — the same single column on a
+  // phone and a monitor, no horizontal scrolling anywhere.
+  const [lane, setLane] = useState<(typeof LANES)[number]>('in-progress')
+  const laneItems = items.filter((item) => item.state === lane)
+
   return (
-    <div className="-mx-4 overflow-x-auto px-4 pb-2">
-      <div className="flex gap-3">
-        {LANES.map((lane) => {
-          const laneItems = items.filter((item) => item.state === lane)
-          return (
-            <div key={lane} className="w-72 shrink-0 space-y-2">
-              <div className="flex items-baseline justify-between px-1">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {LANE_LABEL[lane]}
-                </h3>
-                <span className="text-xs text-slate-400">{laneItems.length}</span>
-              </div>
-              {!laneItems.length && (
-                <p className="px-1 text-xs text-slate-300">empty</p>
-              )}
-              {laneItems.map((item) => (
-                <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
-                  workflow={workflow} runs={runs} />
-              ))}
-            </div>
-          )
-        })}
-      </div>
+    <div className="space-y-3">
+      <select value={lane} onChange={(e) => setLane(e.target.value as typeof lane)}
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900">
+        {LANES.map((l) => (
+          <option key={l} value={l}>
+            {LANE_LABEL[l]} ({items.filter((item) => item.state === l).length})
+          </option>
+        ))}
+      </select>
+
+      {!laneItems.length && (
+        <p className="px-1 text-sm text-slate-400">nothing in {LANE_LABEL[lane].toLowerCase()}</p>
+      )}
+      {laneItems.map((item) => (
+        <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+          workflow={workflow} runs={runs} />
+      ))}
     </div>
   )
 }
