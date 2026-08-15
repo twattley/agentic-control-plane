@@ -510,6 +510,7 @@ function WorkflowProject({
   const [shaping, setShaping] = useState(false)
   const [composing, setComposing] = useState(false)
   const [showLedgerNotes, setShowLedgerNotes] = useState(false)
+  const [view, setView] = useState<'epics' | 'board'>('epics')
   // orphan_run = an old ledger record no longer joining to a current ticket —
   // history bookkeeping, not a problem with today's work. Everything else is.
   const ledgerNotes = workflow.diagnostics.filter((d) => d.code === 'orphan_run')
@@ -517,19 +518,31 @@ function WorkflowProject({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-end gap-3">
-        {!shaping && (
-          <button type="button" onClick={() => setShaping(true)}
-            className="text-sm font-medium text-blue-600">
-            Shape an idea
-          </button>
-        )}
-        {!composing && (
-          <button type="button" onClick={() => setComposing(true)}
-            className="text-sm font-medium text-blue-600">
-            + New story
-          </button>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
+          {(['epics', 'board'] as const).map((v) => (
+            <button key={v} type="button" onClick={() => setView(v)}
+              className={`rounded-md px-3 py-1 text-sm font-medium ${
+                view === v ? 'bg-slate-900 text-white' : 'text-slate-500'
+              }`}>
+              {v === 'epics' ? 'Epics' : 'Board'}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-3">
+          {!shaping && (
+            <button type="button" onClick={() => setShaping(true)}
+              className="text-sm font-medium text-blue-600">
+              Shape an idea
+            </button>
+          )}
+          {!composing && (
+            <button type="button" onClick={() => setComposing(true)}
+              className="text-sm font-medium text-blue-600">
+              + New story
+            </button>
+          )}
+        </div>
       </div>
       {shaping && (
         <DiscussionPanel repoId={repoId} epics={workflow.epics}
@@ -567,25 +580,32 @@ function WorkflowProject({
         </div>
       )}
 
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-slate-800">Epics</h2>
-        {workflow.epics.map((epic) => (
-          <EpicCard key={epic.epic_id} repoId={repoId} epic={epic}
-            workflow={workflow} runs={runs} />
-        ))}
-      </div>
+      {view === 'board' ? (
+        <StoryBoard repoId={repoId} workflow={workflow} runs={runs}
+          items={[...workflow.stories, ...liveLegacyWork(workflow)]} />
+      ) : (
+        <>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-slate-800">Epics</h2>
+            {workflow.epics.map((epic) => (
+              <EpicCard key={epic.epic_id} repoId={repoId} epic={epic}
+                workflow={workflow} runs={runs} />
+            ))}
+          </div>
 
-      {ungrouped.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-slate-800">Ungrouped stories</h2>
-          {ungrouped.map((story) => (
-            <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
-              workflow={workflow} runs={runs} />
-          ))}
-        </div>
+          {ungrouped.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-slate-800">Ungrouped stories</h2>
+              {ungrouped.map((story) => (
+                <WorkflowWorkRow key={story.story_id} repoId={repoId} item={story}
+                  workflow={workflow} runs={runs} />
+              ))}
+            </div>
+          )}
+
+          <LegacySection repoId={repoId} workflow={workflow} runs={runs} />
+        </>
       )}
-
-      <LegacySection repoId={repoId} workflow={workflow} runs={runs} />
 
       {workflow.runs.length > 0 && (
         <div className="space-y-2">
@@ -602,6 +622,52 @@ function WorkflowProject({
         </div>
       )}
     </section>
+  )
+}
+
+// Lifecycle lanes, left to right. `complete` is deliberately absent — finished
+// work leaves the board.
+const LANES = ['backlog', 'ready', 'in-progress', 'blocked'] as const
+const LANE_LABEL: Record<(typeof LANES)[number], string> = {
+  backlog: 'Backlog',
+  ready: 'Ready',
+  'in-progress': 'In progress',
+  blocked: 'Blocked',
+}
+
+function StoryBoard({
+  repoId, workflow, runs, items,
+}: {
+  repoId: number
+  workflow: WorkflowProjection
+  runs: Run[]
+  items: (WorkflowStory | WorkflowLegacy)[]
+}) {
+  return (
+    <div className="-mx-4 overflow-x-auto px-4 pb-2">
+      <div className="flex gap-3">
+        {LANES.map((lane) => {
+          const laneItems = items.filter((item) => item.state === lane)
+          return (
+            <div key={lane} className="w-72 shrink-0 space-y-2">
+              <div className="flex items-baseline justify-between px-1">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {LANE_LABEL[lane]}
+                </h3>
+                <span className="text-xs text-slate-400">{laneItems.length}</span>
+              </div>
+              {!laneItems.length && (
+                <p className="px-1 text-xs text-slate-300">empty</p>
+              )}
+              {laneItems.map((item) => (
+                <WorkflowWorkRow key={item.path} repoId={repoId} item={item}
+                  workflow={workflow} runs={runs} />
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -657,13 +723,21 @@ function isDocStem(stem: string): boolean {
     || DOC_PREFIXES.some((p) => stem.toLowerCase().startsWith(p))
 }
 
+/** Legacy items that are still real, unfinished work — no completed history,
+ * no reference docs. Shared by the legacy list and the board. */
+function liveLegacyWork(workflow: WorkflowProjection): WorkflowLegacy[] {
+  return workflow.legacy.filter(
+    (item) => item.state !== 'complete' && !isDocStem(item.legacy_id),
+  )
+}
+
 function LegacySection({
   repoId, workflow, runs,
 }: { repoId: number; workflow: WorkflowProjection; runs: Run[] }) {
   const [showDocs, setShowDocs] = useState(false)
   // Completed history stays in the repo, not on screen; reference docs collapse.
   const live = workflow.legacy.filter((item) => item.state !== 'complete')
-  const work = live.filter((item) => !isDocStem(item.legacy_id))
+  const work = liveLegacyWork(workflow)
   const docs = live.filter((item) => isDocStem(item.legacy_id))
   if (!live.length) return null
 
