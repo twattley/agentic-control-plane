@@ -10,16 +10,14 @@ continue to link by stable work-unit identity after story moves or renames.
 
 ## Status
 
-- State: in-progress
-- Phase: review-loop
+- State: complete
+- Phase: closed
 - Started: 2026-08-15 06:22 BST
-- Updated: 2026-08-16 19:05 BST
-- Completed: —
-- Last: 2026-08-16 19:05 BST - builder addressed the non-UTF-8 finding:
-  UnicodeDecodeError now raises WorkflowReadError on both the snapshot read and
-  create-story, with an HTTP regression proving 502 and no legacy fallback.
-  139 pytest green
-- Next: reviewer rechecks the non-UTF-8 finding
+- Updated: 2026-08-16 19:32 BST
+- Completed: 2026-08-16 19:32 BST
+- Last: 2026-08-16 19:32 BST - closed on a green gate: 139 pytest, ruff clean
+  on apps/api/app and apps/api/tests, web build clean
+- Next: none
 
 ## Capability
 
