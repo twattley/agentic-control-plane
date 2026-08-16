@@ -52,6 +52,52 @@ def test_fix_pass_keeps_spec_pointer(tmp_path):
     assert "tickets/SBX-3.md" in task
 
 
+def test_fix_pass_carries_the_human_note_when_it_is_the_newest_word(tmp_path):
+    """A human who requests changes has, by definition, disagreed with a
+    reviewer who just passed the work. Prompting from the findings alone tells
+    the builder to fix nothing — the objection never reaches it."""
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "No blocking findings."}
+    )
+    note = SimpleNamespace(
+        type="human_note_posted", payload={"note": "wrap it in an RTVIngestor"}
+    )
+
+    task = _task_for(_detail(events=[findings, note]), "builder", str(tmp_path))
+
+    assert "wrap it in an RTVIngestor" in task
+    assert "No blocking findings." not in task
+
+
+def test_fix_pass_ignores_a_human_note_the_reviewer_has_already_answered(tmp_path):
+    """Order is what makes the note current. A note from an earlier round was
+    already addressed; the newest reviewer findings win."""
+    note = SimpleNamespace(
+        type="human_note_posted", payload={"note": "old objection"}
+    )
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "fix the loop"}
+    )
+
+    task = _task_for(_detail(events=[note, findings]), "builder", str(tmp_path))
+
+    assert "fix the loop" in task
+    assert "old objection" not in task
+
+
+def test_fix_pass_falls_back_to_findings_when_the_note_is_empty(tmp_path):
+    """An empty note carries no instruction. Preferring it would replace real
+    findings with nothing — worse than not having asked."""
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "fix the loop"}
+    )
+    blank = SimpleNamespace(type="human_note_posted", payload={"note": None})
+
+    task = _task_for(_detail(events=[findings, blank]), "builder", str(tmp_path))
+
+    assert "fix the loop" in task
+
+
 def test_prompt_follows_stable_identity_to_current_snapshot_locator(tmp_path):
     current = tmp_path / "tickets" / "in-progress" / "E001-S00-current.md"
     current.parent.mkdir(parents=True)

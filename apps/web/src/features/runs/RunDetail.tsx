@@ -56,8 +56,12 @@ function ActionBar({ data }: { data: RunDetailData }) {
     const text = window.prompt('Note for the builder (a suggested edit, a question):')
     if (text) note.mutate({ type: 'human_note_posted', actor: 'human', payload: { note: text } })
   }
+  // A bounce with no note tells the builder to fix nothing — it prompts from
+  // the last reviewer findings, which just passed the work. Cancelling must
+  // cancel, not silently send the run back with the objection missing.
   const requestChanges = () => {
-    const text = window.prompt('What needs changing?') ?? undefined
+    const text = window.prompt('What needs changing?')?.trim()
+    if (!text) return
     decide.mutate({ decision: 'request_changes', note: text })
   }
 

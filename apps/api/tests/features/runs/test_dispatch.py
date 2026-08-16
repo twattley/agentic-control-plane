@@ -68,7 +68,12 @@ async def _state(client, run_id: int) -> str:
     return (await client.get(f"/api/v1/runs/{run_id}", headers=AUTH)).json()["run"]["state"]
 
 
-async def test_closer_gate_pass_commits_and_closes(db, client, tmp_path):
+async def test_closer_gate_pass_commits_and_closes(db, client, tmp_path, monkeypatch):
+    from app.config import settings
+    # Pin the gate like the fail case does. Reading it from the ambient .env
+    # meant this test passed only while the developer's gate happened to be the
+    # default no-op — setting a real repo test command turned it red.
+    monkeypatch.setattr(settings, "close_gate_command", "true")  # gate passes
     repo_dir = tmp_path / "repo"
     _git_repo(repo_dir)
     run_id = await _run_on(client, repo_dir)

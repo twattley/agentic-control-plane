@@ -21,6 +21,7 @@ import subprocess
 import sys
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 import asyncpg
 
@@ -251,6 +252,40 @@ def _capped_verdict(verdict: str, prior_changes: int, cap: int) -> str:
     return verdict
 
 
+class _Instruction(NamedTuple):
+    source: str
+    label: str
+    text: str
+
+
+#: Where a fix round's instruction comes from, by event type. A human who
+#: requests changes has usually just disagreed with a reviewer who passed the
+#: work, so recency decides: whoever spoke last is the one being answered.
+#: Prompting from the findings alone told the builder to fix "no blocking
+#: findings" — the objection never reached it.
+_INSTRUCTION_SOURCES = {
+    "human_note_posted": ("note", "human review", "Requested changes"),
+    "reviewer_findings_posted": ("summary", "reviewer findings", "Findings"),
+}
+
+
+def _newest_instruction(events) -> _Instruction | None:
+    """The most recent actionable word on the work, human or reviewer.
+
+    An empty note is not a word: preferring it would replace real findings with
+    nothing, which is worse than never having asked.
+    """
+    for event in reversed(events):
+        entry = _INSTRUCTION_SOURCES.get(event.type)
+        if entry is None:
+            continue
+        key, source, label = entry
+        text = (event.payload or {}).get(key)
+        if text and text.strip():
+            return _Instruction(source, label, text.strip())
+    return None
+
+
 def _task_for(detail, role: str, repo_path: str) -> str:
     run = detail.run
     spec = _spec_note(repo_path, run.ticket_id)
@@ -263,12 +298,11 @@ def _task_for(detail, role: str, repo_path: str) -> str:
             "'VERDICT: changes' followed by what must be fixed.\n\n"
             f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
-    findings = next((e for e in reversed(detail.events)
-                     if e.type == "reviewer_findings_posted"), None)
+    instruction = _newest_instruction(detail.events)
     evidence = _evidence_invitation(run.id)
-    if findings:
-        return (f"Address the reviewer findings on {run.ticket_id}: {run.title}.{spec} "
-                f"Findings: {findings.payload.get('summary', '')}{evidence}")
+    if instruction:
+        return (f"Address the {instruction.source} on {run.ticket_id}: {run.title}.{spec} "
+                f"{instruction.label}: {instruction.text}{evidence}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it "
