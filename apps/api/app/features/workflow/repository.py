@@ -151,9 +151,12 @@ def create_story(repo_path: str, data: StoryCreateIn) -> AuthoredStory:
         raise WorkflowAuthorError(
             "repo has no scripts/agent_workflow — install the workflow kit to author stories"
         )
+    # The tool takes exactly one parent mode: an epic ID positional XOR
+    # --standalone. Sending both, or neither, is a usage error it rejects.
+    parent = ["--standalone"] if data.epic_id is None else [data.epic_id]
     try:
         result = subprocess.run(
-            [str(command), "create-story", data.epic_id,
+            [str(command), "create-story", *parent,
              "--title", data.title, "--coordination-class", data.coordination_class],
             cwd=root, capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
         )
@@ -192,11 +195,11 @@ def _merge_story_body(skeleton: str, body: str) -> str:
 
 
 def adopt_legacy(
-    repo_path: str, legacy_id: str, epic_id: str, coordination_class: str
+    repo_path: str, legacy_id: str, epic_id: str | None, coordination_class: str
 ) -> AuthoredStory:
-    """Explicit, human-triggered migration of one legacy ticket into a story.
-    The legacy file is removed only after the story exists — a tool failure
-    loses nothing."""
+    """Explicit, human-triggered migration of one legacy ticket into a story,
+    under an epic or standalone. The legacy file is removed only after the
+    story exists — a tool failure loses nothing."""
     root = Path(repo_path).resolve()
     workflow = load_workflow(repo_path)
     item = next((x for x in workflow.legacy if x.legacy_id == legacy_id), None)

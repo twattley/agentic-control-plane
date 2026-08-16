@@ -223,7 +223,9 @@ export type CoordinationClass = 'contract' | 'platform' | 'feature' | 'validatio
 
 /** Author a story via the repo's own create-story tool. Mirrors StoryCreateIn. */
 export interface StoryCreateInput {
-  epic_id: string
+  /** null = standalone: a first-class story with no parent epic. Required for
+   * repos that have no epics yet. */
+  epic_id: string | null
   coordination_class: CoordinationClass
   title: string
   body?: string | null
@@ -232,13 +234,14 @@ export interface StoryCreateInput {
 /** Explicit legacy → story migration. Mirrors AdoptIn. */
 export interface AdoptInput {
   legacy_id: string
-  epic_id: string
+  /** null adopts the ticket as a standalone story. */
+  epic_id: string | null
   coordination_class: CoordinationClass
 }
 
 export interface AuthoredStory {
   story_id: string
-  epic_id: string
+  epic_id: string | null
   coordination_class: string
   state: string
   title: string

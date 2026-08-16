@@ -100,16 +100,23 @@ async def send_message(repo_id: int, discussion_id: int, data: MessageIn) -> Dis
 async def freeze_discussion(repo_id: int, discussion_id: int, data: FreezeIn) -> TicketDetail:
     """The freeze step: one final agent turn produces the ticket markdown, and
     the PLANE writes the file — the agent never does. Legacy repos get a flat
-    ticket at `slug`; contract repos get a story under `epic_id`, with identity
-    allocated by the repo's own create-story tool."""
-    if data.slug is None and data.epic_id is None:
-        raise HTTPException(status_code=422, detail="freeze needs a slug or an epic_id")
+    ticket at `slug`; contract repos get a story under `epic_id` or a
+    standalone story, with identity allocated by the repo's own create-story
+    tool."""
+    if data.slug is None and data.epic_id is None and not data.standalone:
+        raise HTTPException(
+            status_code=422, detail="freeze needs a slug, an epic_id, or standalone"
+        )
+    if data.epic_id is not None and data.standalone:
+        raise HTTPException(
+            status_code=422, detail="freeze takes an epic_id or standalone, not both"
+        )
     repo = await _repo_or_404(repo_id)
     disc = await _open_discussion_or_error(discussion_id, repo_id)
     detail = await _turn(repo, disc, discussion_agent.FREEZE_PROMPT)
     content = discussion_agent.strip_fence(detail.messages[-1].content)
 
-    if data.epic_id is not None:
+    if data.epic_id is not None or data.standalone:
         ticket = _freeze_story(repo, data, content)
     else:
         try:

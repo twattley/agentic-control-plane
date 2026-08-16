@@ -15,10 +15,12 @@ class MessageIn(BaseModel):
 
 class FreezeIn(BaseModel):
     """Legacy repos freeze to a flat slug; contract repos freeze into a story
-    under an epic (the plane delegates identity to the repo's own tool)."""
+    under an epic, or standalone when the repo has no epic to hang it on (the
+    plane delegates identity to the repo's own tool either way)."""
 
     slug: str | None = Field(default=None, pattern=SLUG_PATTERN)
     epic_id: str | None = None
+    standalone: bool = False
     coordination_class: str = "feature"
 
 

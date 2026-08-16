@@ -115,7 +115,9 @@ class StoryCreateIn(BaseModel):
     """Author a story through the repo's own create-story tool; the optional
     body (from a freeze or the composer) replaces the skeleton's sections."""
 
-    epic_id: str
+    #: None means standalone — a first-class story with no parent epic. A repo
+    #: with no epics yet must still be able to author real work.
+    epic_id: str | None = None
     coordination_class: CoordinationClass
     title: str = Field(min_length=1)
     body: str | None = None
@@ -123,16 +125,17 @@ class StoryCreateIn(BaseModel):
 
 class AdoptIn(BaseModel):
     """The contract's explicit legacy migration: a human names the legacy
-    ticket and the epic it belongs under; the tool allocates the identity."""
+    ticket and the epic it belongs under — or None to adopt it standalone;
+    either way the tool allocates the identity."""
 
     legacy_id: str
-    epic_id: str
+    epic_id: str | None = None
     coordination_class: CoordinationClass
 
 
 class AuthoredStory(BaseModel):
     story_id: str
-    epic_id: str
+    epic_id: str | None
     coordination_class: str
     state: str
     title: str
