@@ -9,12 +9,39 @@ set -e
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TMUX="$(command -v tmux)"
+TMUX="${TMUX_BIN:-$(command -v tmux || true)}"
+LSOF="${LSOF_BIN:-$(command -v lsof || true)}"
+
+if [[ -z "$TMUX" || ! -x "$TMUX" ]]; then
+    echo "tmux was not found; install it or set TMUX_BIN."
+    exit 1
+fi
+
+if [[ -z "$LSOF" || ! -x "$LSOF" ]]; then
+    echo "lsof was not found; install it or set LSOF_BIN."
+    exit 1
+fi
 
 echo "Starting agentic-control-plane services at $(date)"
 
 session_exists() {
-    $TMUX has-session -t "$1" 2>/dev/null
+    "$TMUX" has-session -t "$1" 2>/dev/null
+}
+
+port_in_use() {
+    "$LSOF" -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+preflight_service() {
+    local session_name="$1"
+    local port="$2"
+
+    session_exists "$session_name" && return 0
+    if port_in_use "$port"; then
+        echo "Port $port is occupied without owned tmux session '$session_name'."
+        echo "The existing process was left untouched."
+        return 1
+    fi
 }
 
 start_service() {
@@ -27,10 +54,13 @@ start_service() {
     fi
 
     echo "🚀 Starting $session_name..."
-    $TMUX new-session -d -s "$session_name" -c "$PROJECT_ROOT"
-    $TMUX send-keys -t "$session_name" "$script_path" Enter
+    "$TMUX" new-session -d -s "$session_name" -c "$PROJECT_ROOT"
+    "$TMUX" send-keys -t "$session_name" "$script_path" Enter
     echo "✓ $session_name started in tmux session"
 }
+
+preflight_service "acp-api" 8400
+preflight_service "acp-web" 5400
 
 start_service "acp-api" "./scripts/start_api"
 start_service "acp-web" "./scripts/start_web"

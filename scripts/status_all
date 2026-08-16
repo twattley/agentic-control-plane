@@ -3,12 +3,13 @@
 # agentic-control-plane — check service status: tmux sessions + HTTP health.
 
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+TMUX="${TMUX_BIN:-$(command -v tmux || true)}"
 
 echo "🔍 agentic-control-plane status"
 echo ""
 
 for session in acp-api acp-web; do
-    if tmux has-session -t "$session" 2>/dev/null; then
+    if [[ -n "$TMUX" && -x "$TMUX" ]] && "$TMUX" has-session -t "$session" 2>/dev/null; then
         echo "✅ tmux session '$session' is running"
     else
         echo "❌ tmux session '$session' is not running"

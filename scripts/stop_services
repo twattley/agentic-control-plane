@@ -8,15 +8,21 @@ set -e
 
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-TMUX="$(command -v tmux)"
+TMUX="${TMUX_BIN:-$(command -v tmux || true)}"
+LSOF="${LSOF_BIN:-$(command -v lsof || true)}"
+
+if [[ -z "$TMUX" || ! -x "$TMUX" ]]; then
+    echo "tmux was not found; install it or set TMUX_BIN."
+    exit 1
+fi
 
 echo "Stopping agentic-control-plane services at $(date)"
 
 stop_service() {
     local session_name="$1"
-    if $TMUX has-session -t "$session_name" 2>/dev/null; then
+    if "$TMUX" has-session -t "$session_name" 2>/dev/null; then
         echo "🛑 Stopping $session_name..."
-        $TMUX kill-session -t "$session_name"
+        "$TMUX" kill-session -t "$session_name"
         echo "✓ $session_name stopped"
     else
         echo "- $session_name not running"
@@ -25,6 +31,14 @@ stop_service() {
 
 stop_service "acp-api"
 stop_service "acp-web"
+
+if [[ -n "$LSOF" && -x "$LSOF" ]]; then
+    for port in 8400 5400; do
+        if "$LSOF" -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "Port $port remains occupied by an unmanaged process; it was left untouched."
+        fi
+    done
+fi
 
 echo ""
 echo "Done."
