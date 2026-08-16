@@ -7,6 +7,7 @@ import {
   useDiscussion, useDiscussions, useFreezeDiscussion,
   useSendDiscussionMessage, useStartDiscussion,
 } from '../../api/hooks'
+import { EpicSelect, STANDALONE } from './EpicSelect'
 
 const CLASSES: CoordinationClass[] = ['feature', 'contract', 'platform', 'validation']
 
@@ -25,14 +26,37 @@ function Message({ m }: { m: DiscussionMessage }) {
   )
 }
 
+function ThinkingIndicator() {
+  return (
+    <div role="status" aria-live="polite"
+      className="flex items-center gap-2 px-1 text-sm text-slate-400">
+      <span>Agent is thinking</span>
+      <span aria-hidden="true" className="flex gap-1">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:300ms]" />
+      </span>
+    </div>
+  )
+}
+
 export function DiscussionPanel({
-  repoId, onClose, epics,
-}: { repoId: number; onClose: () => void; epics?: WorkflowEpic[] }) {
-  // Reopen the latest open discussion if one exists; otherwise start fresh.
+  repoId, onClose, epics, ticketContract,
+}: {
+  repoId: number
+  onClose: () => void
+  epics?: WorkflowEpic[]
+  ticketContract?: string | null
+}) {
+  // "New ticket" means a new one. Auto-reopening the newest open discussion
+  // made every visit land back in the last conversation with no way past it —
+  // and a discussion only closes when you freeze it, so shaping a ticket any
+  // other way left one open forever. Resuming is now something you choose.
   const { data: discussions } = useDiscussions(repoId)
   const latestOpen = discussions?.find((d) => d.state === 'open') ?? null
   const [startedId, setStartedId] = useState<number | null>(null)
-  const discussionId = startedId ?? latestOpen?.id ?? null
+  const [resumedId, setResumedId] = useState<number | null>(null)
+  const discussionId = startedId ?? resumedId ?? null
   const { data: detail } = useDiscussion(repoId, discussionId)
 
   const start = useStartDiscussion(repoId)
@@ -41,13 +65,17 @@ export function DiscussionPanel({
 
   const [draft, setDraft] = useState('')
   const [slug, setSlug] = useState('')
-  const [epicId, setEpicId] = useState('')
+  const [epicId, setEpicId] = useState(epics?.[0]?.epic_id ?? STANDALONE)
   const [klass, setKlass] = useState<CoordinationClass>('feature')
-  const contractMode = !!epics?.length
-  const thinking = start.isPending || send.isPending || freeze.isPending
+  // Driven by the repo's contract, NOT by whether epics exist. A contract repo
+  // with no epics yet still freezes into a story (standalone) — deciding on
+  // epic count silently dropped that work into the legacy flat-ticket branch.
+  const contractMode = ticketContract === 'epic-story-v1'
+  const sending = start.isPending || send.isPending
+  const busy = sending || freeze.isPending
 
   const submit = () => {
-    if (!draft.trim() || thinking) return
+    if (!draft.trim() || busy) return
     if (discussionId === null) {
       start.mutate(draft, { onSuccess: (d) => { setStartedId(d.discussion.id); setDraft('') } })
     } else {
@@ -56,11 +84,14 @@ export function DiscussionPanel({
   }
 
   const doFreeze = () => {
-    if (discussionId === null || thinking) return
+    if (discussionId === null || busy) return
     if (contractMode) {
-      if (!epicId) return
+      // Exactly one parent mode — the API rejects both together.
       freeze.mutate(
-        { id: discussionId, epic_id: epicId, coordination_class: klass },
+        {
+          id: discussionId, coordination_class: klass,
+          ...(epicId ? { epic_id: epicId } : { standalone: true }),
+        },
         { onSuccess: onClose },
       )
     } else {
@@ -74,20 +105,30 @@ export function DiscussionPanel({
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex items-baseline justify-between">
-        <h3 className="font-semibold text-slate-800">Shape an idea</h3>
+        <h3 className="font-semibold text-slate-800">
+          {discussionId === null ? 'New ticket' : 'Editing draft'}
+        </h3>
         <button type="button" onClick={onClose} className="text-sm text-slate-400">close</button>
       </div>
 
-      <div className="space-y-3">
+      <div aria-busy={sending} className="space-y-3">
         {detail?.messages.map((m) => <Message key={m.id} m={m} />)}
-        {thinking && <p className="animate-pulse px-1 text-sm text-slate-400">thinking…</p>}
-        {!detail?.messages.length && !thinking && (
+        {sending && <ThinkingIndicator />}
+        {!detail?.messages.length && !sending && (
           <p className="text-sm text-slate-400">
-            Describe the idea — the agent reads this repo while you talk, then you freeze
-            the result into a ticket.
+            Describe the idea — the agent reads this repo while you talk. Nothing is
+            written until you hit Create ticket.
           </p>
         )}
       </div>
+
+      {discussionId === null && latestOpen !== null && (
+        <button type="button" onClick={() => setResumedId(latestOpen.id)}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm text-slate-500">
+          Carry on with the unfinished draft from{' '}
+          {new Date(latestOpen.updated_at).toLocaleDateString()} instead
+        </button>
+      )}
 
       <div className="flex gap-2">
         <textarea rows={2} value={draft} onChange={(e) => setDraft(e.target.value)}
@@ -96,9 +137,9 @@ export function DiscussionPanel({
           }}
           placeholder={discussionId === null ? 'What do you want to build?' : 'Reply…'}
           className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm" />
-        <button type="button" onClick={submit} disabled={thinking || !draft.trim()}
-          className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-40">
-          Send
+        <button type="button" onClick={submit} disabled={busy || !draft.trim()}
+          className="min-w-24 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-40">
+          {sending ? 'Thinking…' : 'Send'}
         </button>
       </div>
 
@@ -106,13 +147,7 @@ export function DiscussionPanel({
         <div className="flex gap-2 border-t border-slate-100 pt-3">
           {contractMode ? (
             <>
-              <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
-                className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-2 text-sm">
-                <option value="">epic…</option>
-                {epics?.map((e) => (
-                  <option key={e.epic_id} value={e.epic_id}>{e.epic_id} · {e.title}</option>
-                ))}
-              </select>
+              <EpicSelect value={epicId} onChange={setEpicId} epics={epics ?? []} />
               <select value={klass}
                 onChange={(e) => setKlass(e.target.value as CoordinationClass)}
                 className="rounded border border-slate-300 bg-white px-2 py-2 text-sm">
@@ -125,9 +160,9 @@ export function DiscussionPanel({
               className="flex-1 rounded border border-slate-300 px-3 py-2 font-mono text-sm" />
           )}
           <button type="button" onClick={doFreeze}
-            disabled={thinking || (contractMode ? !epicId : !slug.trim())}
+            disabled={busy || (!contractMode && !slug.trim())}
             className="rounded-lg bg-blue-600 px-4 text-sm font-medium text-white disabled:opacity-40">
-            {freeze.isPending ? 'freezing…' : contractMode ? 'Freeze story' : 'Freeze ticket'}
+            {freeze.isPending ? 'creating…' : 'Create ticket'}
           </button>
         </div>
       )}

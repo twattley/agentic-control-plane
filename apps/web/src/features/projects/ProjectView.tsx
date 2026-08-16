@@ -17,7 +17,14 @@ import {
 } from '../../api/hooks'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
+import { EpicSelect, STANDALONE, parentForApi } from './EpicSelect'
 import { DocumentBody } from './DocumentBody'
+
+//: The two ways to create work sit side by side in both the legacy and workflow
+//: headers. Shared constants so the pair keeps reading as one choice rather
+//: than drifting into four separately-tweaked class strings.
+const PRIMARY_ACTION = 'rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white active:bg-slate-700'
+const SECONDARY_ACTION = 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 active:bg-slate-50'
 
 const TICKET_TEMPLATE = `# Title
 
@@ -258,19 +265,17 @@ function TicketList({ repoId, runs }: { repoId: number; runs: Run[] }) {
 
   return (
     <section className="space-y-2">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-800">Tickets</h2>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {!shaping && (
-            <button type="button" onClick={() => setShaping(true)}
-              className="text-sm font-medium text-blue-600">
-              Shape an idea
+            <button type="button" onClick={() => setShaping(true)} className={PRIMARY_ACTION}>
+              New ticket
             </button>
           )}
           {!composing && (
-            <button type="button" onClick={() => setComposing(true)}
-              className="text-sm font-medium text-blue-600">
-              + New ticket
+            <button type="button" onClick={() => setComposing(true)} className={SECONDARY_ACTION}>
+              Blank ticket
             </button>
           )}
         </div>
@@ -312,14 +317,14 @@ function NewStoryForm({
   repoId, workflow, onDone,
 }: { repoId: number; workflow: WorkflowProjection; onDone: () => void }) {
   const create = useCreateStory(repoId)
-  const [epicId, setEpicId] = useState(workflow.epics[0]?.epic_id ?? '')
+  const [epicId, setEpicId] = useState(workflow.epics[0]?.epic_id ?? STANDALONE)
   const [klass, setKlass] = useState<CoordinationClass>('feature')
   const [title, setTitle] = useState('')
 
   const save = () => {
-    if (!title.trim() || !epicId) return
+    if (!title.trim()) return
     create.mutate(
-      { epic_id: epicId, coordination_class: klass, title: title.trim() },
+      { epic_id: parentForApi(epicId), coordination_class: klass, title: title.trim() },
       { onSuccess: onDone },
     )
   }
@@ -327,25 +332,20 @@ function NewStoryForm({
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
       <p className="text-sm text-slate-500">
-        Creates a canonical story skeleton in <code>backlog/</code> via the repo's own
-        tool — shape it, then mark it ready.
+        Creates an empty ticket in <code>backlog/</code> via the repo's own tool —
+        you write it up, then mark it ready.
       </p>
       <input className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
         placeholder="story title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <div className="flex gap-2">
-        <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
-          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-2 text-sm">
-          {workflow.epics.map((e) => (
-            <option key={e.epic_id} value={e.epic_id}>{e.epic_id} · {e.title}</option>
-          ))}
-        </select>
+        <EpicSelect value={epicId} onChange={setEpicId} epics={workflow.epics} />
         <select value={klass} onChange={(e) => setKlass(e.target.value as CoordinationClass)}
           className="rounded border border-slate-300 bg-white px-2 py-2 text-sm">
           {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={save} disabled={create.isPending || !title.trim() || !epicId}
+        <button type="button" onClick={save} disabled={create.isPending || !title.trim()}
           className="flex-1 rounded-lg bg-slate-900 py-2.5 font-medium text-white disabled:opacity-40">
           {create.isPending ? 'creating…' : 'Create story'}
         </button>
@@ -363,29 +363,24 @@ function AdoptControls({
   repoId, legacyId, workflow,
 }: { repoId: number; legacyId: string; workflow: WorkflowProjection }) {
   const adopt = useAdoptLegacy(repoId)
-  const [epicId, setEpicId] = useState(workflow.epics[0]?.epic_id ?? '')
+  const [epicId, setEpicId] = useState(workflow.epics[0]?.epic_id ?? STANDALONE)
   const [klass, setKlass] = useState<CoordinationClass>('feature')
 
   return (
     <div className="space-y-2 border-t border-slate-100 pt-3">
       <p className="text-xs text-slate-500">
-        Adopt as a story to make it startable — picks an identity under an epic;
-        the legacy file's content moves in.
+        Adopt as a story to make it startable — picks an identity under an epic,
+        or standalone; the legacy file's content moves in.
       </p>
       <div className="flex gap-2">
-        <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
-          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-2 text-sm">
-          {workflow.epics.map((e) => (
-            <option key={e.epic_id} value={e.epic_id}>{e.epic_id} · {e.title}</option>
-          ))}
-        </select>
+        <EpicSelect value={epicId} onChange={setEpicId} epics={workflow.epics} />
         <select value={klass} onChange={(e) => setKlass(e.target.value as CoordinationClass)}
           className="rounded border border-slate-300 bg-white px-2 py-2 text-sm">
           {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button type="button" disabled={adopt.isPending || !epicId}
+        <button type="button" disabled={adopt.isPending}
           onClick={() => adopt.mutate({
-            legacy_id: legacyId, epic_id: epicId, coordination_class: klass,
+            legacy_id: legacyId, epic_id: parentForApi(epicId), coordination_class: klass,
           })}
           className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-40">
           {adopt.isPending ? 'adopting…' : 'Adopt as story'}
@@ -478,8 +473,11 @@ function WorkflowWorkRow({
               Control Plane run · {currentRun.state}
             </Link>
           )}
+          {/* Gated on the contract, not on epic count. A repo with no epics can
+              still adopt standalone, and requiring an epic left its only route
+              off legacy hidden — the ticket became unstartable and unfixable. */}
           {item.kind === 'legacy' && workflow.ticket_contract === 'epic-story-v1'
-            && workflow.epics.length > 0 && !active && (
+            && !active && (
             <AdoptControls repoId={repoId} legacyId={item.legacy_id} workflow={workflow} />
           )}
           {item.kind === 'story' && item.state === 'backlog'
@@ -537,23 +535,22 @@ function WorkflowProject({
             </button>
           ))}
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {!shaping && (
-            <button type="button" onClick={() => setShaping(true)}
-              className="text-sm font-medium text-blue-600">
-              Shape an idea
+            <button type="button" onClick={() => setShaping(true)} className={PRIMARY_ACTION}>
+              New ticket
             </button>
           )}
           {!composing && (
-            <button type="button" onClick={() => setComposing(true)}
-              className="text-sm font-medium text-blue-600">
-              + New story
+            <button type="button" onClick={() => setComposing(true)} className={SECONDARY_ACTION}>
+              Blank ticket
             </button>
           )}
         </div>
       </div>
       {shaping && (
         <DiscussionPanel repoId={repoId} epics={workflow.epics}
+          ticketContract={workflow.ticket_contract}
           onClose={() => setShaping(false)} />
       )}
       {composing && (
@@ -801,7 +798,10 @@ export function ProjectView() {
 
       {workflowError && <p className="text-sm text-red-600">{String(workflowError)}</p>}
       {workflow?.source === 'legacy-flat' && <TicketList repoId={repoId} runs={runs ?? []} />}
-      {workflow?.source === 'agent-workflow-snapshot-v1' && (
+      {/* Any structured snapshot renders here. Naming one version meant a repo
+          upgrading its emitter silently showed an empty project — the outage
+          reading v2 was supposed to avoid. */}
+      {workflow && workflow.source !== 'legacy-flat' && (
         <WorkflowProject repoId={repoId} workflow={workflow} runs={runs ?? []} />
       )}
 

@@ -132,7 +132,10 @@ export function useSendDiscussionMessage(repoId: number) {
 export interface FreezeTarget {
   id: number
   slug?: string
+  /** An epic to hang the story on, or `standalone` for no parent. Exactly one
+   * of slug / epic_id / standalone. */
   epic_id?: string
+  standalone?: boolean
   coordination_class?: CoordinationClass
 }
 
