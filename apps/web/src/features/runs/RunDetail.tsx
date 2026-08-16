@@ -1,6 +1,7 @@
 import type {
   Artifact, ArtifactKind, Event, RunDetail as RunDetailData,
 } from '@agentic-control-plane/domain-types'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useDecide, useDispatch, usePostEvent, useRun } from '../../api/hooks'
 import { DocumentBody } from '../projects/DocumentBody'
@@ -52,17 +53,25 @@ function ActionBar({ data }: { data: RunDetailData }) {
   const state = data.run.state
   const busy = decide.isPending || note.isPending
 
-  const addNote = () => {
-    const text = window.prompt('Note for the builder (a suggested edit, a question):')
-    if (text) note.mutate({ type: 'human_note_posted', actor: 'human', payload: { note: text } })
-  }
-  // A bounce with no note tells the builder to fix nothing — it prompts from
-  // the last reviewer findings, which just passed the work. Cancelling must
-  // cancel, not silently send the run back with the objection missing.
-  const requestChanges = () => {
-    const text = window.prompt('What needs changing?')?.trim()
+  // The most important text a human writes into this system, so it gets a real
+  // control. `window.prompt` gave one unwrapped line with no way to review what
+  // you had typed — and returned null on cancel, which is how a bounce with no
+  // note reached the builder at all.
+  const [composing, setComposing] = useState<'changes' | 'note' | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const close = () => { setComposing(null); setDraft('') }
+  const send = () => {
+    const text = draft.trim()
     if (!text) return
-    decide.mutate({ decision: 'request_changes', note: text })
+    if (composing === 'changes') {
+      decide.mutate({ decision: 'request_changes', note: text }, { onSuccess: close })
+    } else {
+      note.mutate(
+        { type: 'human_note_posted', actor: 'human', payload: { note: text } },
+        { onSuccess: close },
+      )
+    }
   }
 
   const canApprove = state === 'awaiting_human'
@@ -73,6 +82,32 @@ function ActionBar({ data }: { data: RunDetailData }) {
     <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
       {(decide.error || note.error) && (
         <p className="mb-2 text-sm text-red-600">{String(decide.error ?? note.error)}</p>
+      )}
+      {composing && (
+        <div className="mb-2 space-y-2">
+          <textarea
+            autoFocus
+            rows={5}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={composing === 'changes'
+              ? 'What needs changing? The builder reads this as its instruction.'
+              : 'A note for the builder — a suggestion, a question.'}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={send}
+              disabled={busy || !draft.trim()}
+              className="flex-1 rounded-lg bg-slate-900 py-2.5 font-medium text-white disabled:opacity-40"
+            >
+              {busy ? 'sending…' : composing === 'changes' ? 'Request changes' : 'Add note'}
+            </button>
+            <button onClick={close} className="rounded-lg border border-slate-300 px-4 text-sm text-slate-600">
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
       {canClose && (
         <button
@@ -92,14 +127,14 @@ function ActionBar({ data }: { data: RunDetailData }) {
           Approve
         </button>
         <button
-          onClick={requestChanges}
+          onClick={() => setComposing(composing === 'changes' ? null : 'changes')}
           disabled={busy || !canApprove}
           className="truncate rounded-lg bg-amber-500 py-2.5 font-medium text-white disabled:opacity-40"
         >
           Changes
         </button>
         <button
-          onClick={addNote}
+          onClick={() => setComposing(composing === 'note' ? null : 'note')}
           disabled={busy}
           className="rounded-lg border border-slate-300 py-2.5 font-medium text-slate-700 disabled:opacity-40"
         >
