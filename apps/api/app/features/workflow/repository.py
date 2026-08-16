@@ -51,7 +51,10 @@ def load_workflow(repo_path: str) -> WorkflowProjection:
             timeout=_TIMEOUT_SECONDS,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    # UnicodeDecodeError is a ValueError, not an OSError: `text=True` decodes
+    # strictly, so an adapter emitting non-UTF-8 bytes escaped as an unhandled
+    # 500 instead of the 502 every other adapter failure returns.
+    except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError) as exc:
         raise WorkflowReadError(f"workflow snapshot command failed: {exc}") from exc
 
     try:
@@ -160,7 +163,8 @@ def create_story(repo_path: str, data: StoryCreateIn) -> AuthoredStory:
              "--title", data.title, "--coordination-class", data.coordination_class],
             cwd=root, capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    # Same strict-decode exposure as the snapshot read above.
+    except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError) as exc:
         raise WorkflowReadError(f"create-story failed: {exc}") from exc
     if result.returncode != 0:
         raise WorkflowReadError(

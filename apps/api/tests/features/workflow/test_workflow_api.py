@@ -274,6 +274,35 @@ async def test_present_invalid_adapter_is_an_explicit_error_without_fallback(
     assert "legacy-flat" not in response.text
 
 
+async def test_undecodable_snapshot_output_is_an_explicit_error_without_fallback(
+    client, tmp_path
+):
+    """A snapshot that is not valid UTF-8 is a broken adapter, not an absent one.
+
+    `text=True` decodes strictly, and UnicodeDecodeError is a ValueError — so it
+    slipped past the OSError handler and escaped as an unhandled 500 rather than
+    the 502 every other adapter failure returns.
+    """
+    tickets = tmp_path / "tickets"
+    tickets.mkdir()
+    (tickets / "LEGACY.md").write_text("# Must not become fallback")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    command = scripts / "agent_workflow"
+    command.write_text(
+        "#!/bin/sh\n"
+        'test "$1" = snapshot || exit 92\n'
+        "printf '\\376\\377bad bytes'\n"  # a UTF-16 BOM: never valid UTF-8
+    )
+    command.chmod(0o755)
+    repo_id = await _register(client, str(tmp_path))
+
+    response = await client.get(f"/api/v1/repos/{repo_id}/workflow", headers=AUTH)
+
+    assert response.status_code == 502
+    assert "legacy-flat" not in response.text
+
+
 async def test_snapshot_timeout_is_an_explicit_error(client, tmp_path, monkeypatch):
     _install_raw(tmp_path, json.dumps(_snapshot()), delay=1)
     monkeypatch.setattr(workflow_repository, "_TIMEOUT_SECONDS", 0.01)

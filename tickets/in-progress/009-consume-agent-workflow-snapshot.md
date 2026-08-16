@@ -13,14 +13,13 @@ continue to link by stable work-unit identity after story moves or renames.
 - State: in-progress
 - Phase: review-loop
 - Started: 2026-08-15 06:22 BST
-- Updated: 2026-08-15 14:48 BST
+- Updated: 2026-08-16 19:05 BST
 - Completed: —
-- Last: 2026-08-15 14:48 BST - human resolved the Ruff baseline by fixing it
-  rather than rescoping: 19 errors (18 E501, 1 import-sort) cleared, repo-wide
-  `ruff check apps/api` green, 126 pytest green
-- Next: reviewer rechecks all three findings — unsafe locator (create_run now
-  gates on document_from_workflow), strict snapshot models (strict=True on
-  SnapshotRecord and WorkflowSnapshot), and the now-green gate — then close
+- Last: 2026-08-16 19:05 BST - builder addressed the non-UTF-8 finding:
+  UnicodeDecodeError now raises WorkflowReadError on both the snapshot read and
+  create-story, with an HTTP regression proving 502 and no legacy fallback.
+  139 pytest green
+- Next: reviewer rechecks the non-UTF-8 finding
 
 ## Capability
 
