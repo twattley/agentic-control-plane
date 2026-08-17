@@ -12,15 +12,13 @@ silently absorbed.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped from acp-022's review (standards-reviewer,
-  warning 2): the web surface was outside 022's write boundary, so the
-  visibility half is deferred here rather than smuggled in.
-- Next: builder claims
+- State: complete
+- Phase: done
+- Started: 2026-08-17 11:21:14 BST
+- Updated: 2026-08-17 11:30
+- Completed: 2026-08-17 11:30
+- Last: close-ticket verified reviewer run dc0ed74b2c6061b1 and close gate passed
+- Next: closed
 
 ## Capability
 
@@ -48,6 +46,6 @@ cd apps/web && npx tsc -b --noEmit && npm run build
 
 ## Done When
 
-- [ ] A run with a `builder_committed` event shows a visible warning on its
+- [x] A run with a `builder_committed` event shows a visible warning on its
       detail page; a run without one shows nothing new.
-- [ ] No backend change.
+- [x] No backend change.

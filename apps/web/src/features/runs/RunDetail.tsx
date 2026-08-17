@@ -35,6 +35,19 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+function BuilderCommitWarning({ event }: { event: Event }) {
+  return (
+    <section
+      role="alert"
+      aria-label="Builder boundary warning"
+      className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 shadow-sm"
+    >
+      <p className="font-semibold">⚠ Builder committed during its pass</p>
+      <p className="mt-1 whitespace-pre-wrap text-red-800">{payloadText(event)}</p>
+    </section>
+  )
+}
+
 // Which gate ran before the close commit, and how it went. An ungated close
 // reached `closed` without anything running — that must read as a warning,
 // never as a green tick. Only an explicit `gate_command: null` means ungated:
@@ -180,6 +193,8 @@ export function RunDetailPage() {
   if (isLoading || !data) return <p className="p-4 text-slate-400">loading…</p>
 
   const { run, events, revisions, pending_revision_request: pendingRequest } = data
+  const builderCommit = [...events].reverse()
+    .find((e) => e.type === 'builder_committed')
   const gate = [...events].reverse()
     .find((e) => e.type === 'gate_passed' || e.type === 'gate_failed')
 
@@ -198,6 +213,7 @@ export function RunDetailPage() {
           </div>
         </header>
 
+        {builderCommit && <BuilderCommitWarning event={builderCommit} />}
         {gate && <CloseGate event={gate} />}
 
         <div className="space-y-6">
