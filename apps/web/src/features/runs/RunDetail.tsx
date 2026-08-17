@@ -46,6 +46,29 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+// A run that exhausted its change rounds also lands on the human — but it is a
+// rejection, not an approval. Showing both as "pass" is how a rejected change
+// got approved and committed.
+function ReviewerFindings({ findings }: { findings: Event }) {
+  const { verdict, escalated } = findings.payload as {
+    verdict?: string; escalated?: boolean
+  }
+  const badge = escalated
+    ? { label: '✋ changes · rounds spent, over to you', tone: 'text-amber-700' }
+    : verdict === 'pass'
+      ? { label: '✅ pass', tone: 'text-green-700' }
+      : { label: '✋ changes', tone: 'text-amber-700' }
+
+  return (
+    <Panel title="Reviewer findings">
+      <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+        <span className={`mr-2 font-medium ${badge.tone}`}>{badge.label}</span>
+        {payloadText(findings) || <span className="text-slate-400">no detail</span>}
+      </div>
+    </Panel>
+  )
+}
+
 function ActionBar({ data }: { data: RunDetailData }) {
   const id = data.run.id
   const decide = useDecide(id)
@@ -179,16 +202,7 @@ export function RunDetailPage() {
           </div>
         </header>
 
-        {findings && (
-          <Panel title="Reviewer findings">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
-              <span className="mr-2 font-medium">
-                {(findings.payload as { verdict?: string }).verdict === 'pass' ? '✅ pass' : '✋ changes'}
-              </span>
-              {payloadText(findings) || <span className="text-slate-400">no detail</span>}
-            </div>
-          </Panel>
-        )}
+        {findings && <ReviewerFindings findings={findings} />}
 
         {brief && (
           <Panel title="Builder brief">

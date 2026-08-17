@@ -63,13 +63,17 @@ def event_transition(state: str, event_type: str, payload: dict | None = None) -
     """New state after an event, or None when the event doesn't move state.
 
     A reviewer's findings split on `payload['verdict']`: 'pass' sends the run to
-    the human, anything else (changes requested) sends it back to the builder.
+    the human, anything else (changes requested) sends it back to the builder —
+    unless `payload['escalated']` says the run has spent its change rounds, in
+    which case a rejection goes to the human too, still recorded as a rejection.
     """
     if event_type == "reviewer_findings_posted":
         if state != "reviewing":
             raise IllegalTransitionError(state, event_type)
-        verdict = (payload or {}).get("verdict")
-        return "awaiting_human" if verdict == "pass" else "needs_work"
+        findings = payload or {}
+        if findings.get("escalated"):
+            return "awaiting_human"
+        return "awaiting_human" if findings.get("verdict") == "pass" else "needs_work"
 
     edges = _EVENT.get(event_type)
     if edges is None:

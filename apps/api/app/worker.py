@@ -163,13 +163,14 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
             1 for e in detail.events
             if e.type == "reviewer_findings_posted" and e.payload.get("verdict") == "changes"
         )
-        verdict = _capped_verdict(verdict, prior_changes, settings.max_review_rounds)
-        if verdict == "pass" and prior_changes >= settings.max_review_rounds:
+        outcome = _review_outcome(verdict, prior_changes, settings.max_review_rounds)
+        if outcome.escalated:
             summary = f"[escalated to human after {prior_changes} change rounds] {summary}"
         await runs_service.record_event(
             pool, run_id,
             EventIn(type="reviewer_findings_posted", actor="reviewer",
-                    payload={"verdict": verdict, "summary": summary, "provider": provider}),
+                    payload={"verdict": outcome.verdict, "escalated": outcome.escalated,
+                             "summary": summary, "provider": provider}),
         )
     return "done"
 
@@ -244,12 +245,21 @@ def _parse_verdict(stdout: str, provider: str) -> str:
     return "pass"
 
 
-def _capped_verdict(verdict: str, prior_changes: int, cap: int) -> str:
-    """Flip a 'changes' verdict to 'pass' (escalate to human) once the run has
-    already bounced back to the builder `cap` times."""
-    if verdict == "changes" and prior_changes >= cap:
-        return "pass"
-    return verdict
+class _ReviewOutcome(NamedTuple):
+    verdict: str
+    escalated: bool
+
+
+def _review_outcome(verdict: str, prior_changes: int, cap: int) -> _ReviewOutcome:
+    """What the reviewer said, and whether the run has run out of rounds.
+
+    Two separate facts. Folding them together — recording 'pass' over a
+    rejection so the run would route to the human — meant the plane told the
+    human the reviewer had approved work it had rejected, and let that
+    rejection satisfy a gate whose whole purpose is to require a passing
+    review.
+    """
+    return _ReviewOutcome(verdict, verdict == "changes" and prior_changes >= cap)
 
 
 class _Instruction(NamedTuple):

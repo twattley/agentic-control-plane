@@ -13,14 +13,15 @@ escalation as its own flag that the routing reads.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-16
-- Completed: —
-- Last: 2026-08-16 - found on transcriber run 3, where a third-round `changes`
-  was stored as `pass`
-- Next: builder claims
+- State: complete
+- Phase: closed
+- Started: 2026-08-17
+- Updated: 2026-08-17
+- Completed: 2026-08-17
+- Last: 2026-08-17 - closed on a green gate: 145 pytest, ruff clean, tsc and web
+  build clean. Scope was widened during the work: state_machine.py was
+  forbidden when this was shaped, which made the ticket impossible.
+- Next: none
 
 ## Why
 
@@ -79,14 +80,22 @@ to anything gating on review outcome.
 - `allowed_paths`:
   - `apps/api/app/worker.py`
   - `apps/api/app/features/runs/models.py`
+  - `apps/api/app/services/state_machine.py`
   - `apps/api/tests/features/runs/**`
+  - `apps/api/tests/services/**`
   - `apps/web/src/features/runs/**`
   - `packages/domain-types/src/index.ts`
 - `read_context_paths`:
   - `ARCHITECTURE.md`
   - `apps/api/app/config.py`
 - `forbidden_paths`:
-  - `apps/api/app/services/state_machine.py`
+  - `apps/api/schema/*.sql`
+
+`state_machine.py` was forbidden when this was shaped, which made the ticket
+impossible: `event_transition` routes on `payload['verdict']`, so keeping the
+reviewer's verdict honest *and* still escalating requires the router to read
+the escalation flag instead. Scope widened deliberately, with the transition
+table itself — the legal edges — unchanged.
 - `depends_on`:
   - none
 - `parallelizable`: no
@@ -100,12 +109,12 @@ cd apps/web && npx tsc -b --noEmit
 
 ## Done When
 
-- [ ] A reviewer returning `changes` on the round that exhausts the cap has
+- [x] A reviewer returning `changes` on the round that exhausts the cap has
       `changes` stored as its verdict, with `escalated` true.
-- [ ] That run still routes to `awaiting_human` — the cap keeps working.
-- [ ] A genuine `pass` is indistinguishable from today and carries no
+- [x] That run still routes to `awaiting_human` — the cap keeps working.
+- [x] A genuine `pass` is indistinguishable from today and carries no
       escalation flag.
-- [ ] The run view shows an escalated rejection differently from a pass.
-- [ ] A test pins that an escalated rejection does not satisfy a check for a
+- [x] The run view shows an escalated rejection differently from a pass.
+- [x] A test pins that an escalated rejection does not satisfy a check for a
       passing review.
-- [ ] `_capped_verdict` no longer exists.
+- [x] `_capped_verdict` no longer exists.
