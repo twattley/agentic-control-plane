@@ -3,9 +3,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# Mirrored by ArtifactKind in packages/domain-types. `evidence` is optional
-# markdown a builder leaves to demonstrate the outcome.
-ArtifactKind = Literal["diff", "test_output", "screenshot", "log", "evidence"]
+# Mirrored by ArtifactKind in packages/domain-types. `revision_base` is the
+# exact staged tree at a human boundary; `revision_diff` is the response delta
+# shown to the human. The ordinary `diff` remains the full reviewer input.
+ArtifactKind = Literal[
+    "diff", "test_output", "screenshot", "log", "evidence",
+    "revision_base", "revision_diff",
+]
 
 
 class RunIn(BaseModel):
@@ -86,6 +90,25 @@ class Lease(BaseModel):
     released_at: datetime | None = None
 
 
+class RunRevision(BaseModel):
+    """One reviewed result in the human-facing code conversation."""
+
+    checkpoint_event_id: int
+    request_event_id: int | None = None
+    request: str | None = None
+    headline: str
+    diff: str
+    created_at: datetime
+
+
+class RevisionRequest(BaseModel):
+    """A request awaiting its next reviewed agent-loop response."""
+
+    event_id: int
+    text: str
+    created_at: datetime
+
+
 class RunDetail(BaseModel):
     """Everything the phone needs to render a run in one payload."""
 
@@ -93,6 +116,8 @@ class RunDetail(BaseModel):
     events: list[Event]
     artifacts: list[Artifact]
     leases: list[Lease]
+    revisions: list[RunRevision]
+    pending_revision_request: RevisionRequest | None = None
 
 
 class BoardPane(BaseModel):

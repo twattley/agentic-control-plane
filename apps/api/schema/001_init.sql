@@ -45,11 +45,12 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS events_run_idx ON events (run_id, id);
 
--- Attached outputs: diffs, test output, screenshots, logs, evidence.
+-- Attached outputs: reviewer diffs, revision baselines/deltas, test output,
+-- screenshots, logs, and evidence.
 CREATE TABLE IF NOT EXISTS artifacts (
     id          BIGSERIAL PRIMARY KEY,
     run_id      BIGINT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-    kind        TEXT NOT NULL,              -- diff | test_output | screenshot | log | evidence
+    kind        TEXT NOT NULL,              -- closed by the API's ArtifactKind contract
     content     TEXT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

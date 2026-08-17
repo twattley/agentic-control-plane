@@ -6,6 +6,8 @@ Every state-changing operation computes the legal target state *before* writing,
 so an illegal request touches no rows.
 """
 
+import json
+
 import asyncpg
 
 from app.config import ROLE_FOR_STATE
@@ -19,9 +21,11 @@ from app.features.runs.models import (
     DecisionIn,
     Event,
     EventIn,
+    RevisionRequest,
     Run,
     RunDetail,
     RunIn,
+    RunRevision,
 )
 from app.features.workflow import repository as workflow_repo
 from app.services import executor, state_machine
@@ -105,12 +109,124 @@ async def list_runs(pool: asyncpg.Pool, repo_id: int | None = None) -> list[Run]
 async def run_detail(pool: asyncpg.Pool, run_id: int) -> RunDetail:
     async with pool.acquire() as conn:
         run = await _load(conn, run_id)
+        events = await repo.list_events(conn, run_id)
+        artifacts = await repo.list_artifacts(conn, run_id)
+        revisions, pending_request = _revision_history(events, artifacts)
         return RunDetail(
             run=run,
-            events=await repo.list_events(conn, run_id),
-            artifacts=await repo.list_artifacts(conn, run_id),
+            events=events,
+            artifacts=artifacts,
             leases=await repo.list_leases(conn, run_id),
+            revisions=revisions,
+            pending_revision_request=pending_request,
         )
+
+
+def _revision_history(
+    events: list[Event], artifacts: list[Artifact]
+) -> tuple[list[RunRevision], RevisionRequest | None]:
+    """Project append-only agent traffic into human-visible review turns."""
+    artifact_by_id = {artifact.id: artifact for artifact in artifacts}
+    first_base = _first_structured_base(events, artifact_by_id)
+    legacy = _legacy_revision(
+        events, artifact_by_id, before_event_id=first_base.id if first_base else None
+    )
+    revisions = [legacy] if legacy and first_base else []
+    pending: RevisionRequest | None = None
+
+    for event in events:
+        if (
+            event.type == "human_note_posted"
+            and event.payload.get("decision") == "request_changes"
+        ):
+            pending = RevisionRequest(
+                event_id=event.id,
+                text=(event.payload.get("note") or "Changes requested").strip(),
+                created_at=event.created_at,
+            )
+            continue
+
+        checkpoint = event.payload.get("revision")
+        if event.type != "reviewer_findings_posted" or not isinstance(checkpoint, dict):
+            continue
+        artifact_id = checkpoint.get("diff_artifact_id")
+        artifact = artifact_by_id.get(artifact_id)
+        brief = next(
+            (prior for prior in reversed(events) if (
+                prior.id < event.id and prior.type == "builder_brief_posted"
+            )),
+            None,
+        )
+        revisions.append(RunRevision(
+            checkpoint_event_id=event.id,
+            request_event_id=pending.event_id if pending else None,
+            request=pending.text if pending else None,
+            headline=_brief_headline(brief)
+            if brief else str(checkpoint.get("headline") or "Work updated"),
+            diff=artifact.content if artifact else "",
+            created_at=event.created_at,
+        ))
+        pending = None
+
+    if first_base or revisions:
+        return revisions, pending
+
+    # Runs created before revision checkpoints existed cannot yield trustworthy
+    # increments. Preserve their useful current result without inventing history.
+    return ([legacy] if legacy else []), pending
+
+
+def _first_structured_base(
+    events: list[Event], artifact_by_id: dict[int, Artifact]
+) -> Event | None:
+    for event in events:
+        if event.type != "revision_base_attached":
+            continue
+        artifact = artifact_by_id.get(event.payload.get("artifact_id"))
+        if artifact is None:
+            continue
+        try:
+            snapshot = json.loads(artifact.content)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(snapshot, dict) and snapshot.get("tree"):
+            return event
+    return None
+
+
+def _legacy_revision(
+    events: list[Event], artifact_by_id: dict[int, Artifact],
+    before_event_id: int | None = None,
+) -> RunRevision | None:
+    eligible = [
+        event for event in events
+        if before_event_id is None or event.id < before_event_id
+    ]
+    brief = next(
+        (event for event in reversed(eligible) if event.type == "builder_brief_posted"),
+        None,
+    )
+    diff_event = next(
+        (event for event in reversed(eligible) if event.type == "diff_attached"),
+        None,
+    )
+    diff = artifact_by_id.get(diff_event.payload.get("artifact_id")) if diff_event else None
+    if brief is None and diff is None:
+        return None
+    source = brief or eligible[-1]
+    return RunRevision(
+        checkpoint_event_id=source.id,
+        headline=_brief_headline(brief) if brief else "Work updated",
+        diff=diff.content if diff else "",
+        created_at=source.created_at,
+    )
+
+
+def _brief_headline(brief: Event) -> str:
+    summary = str(brief.payload.get("summary") or "")
+    lines = [line.strip() for line in summary.splitlines() if line.strip()]
+    headline = brief.payload.get("headline") or (lines[0] if lines else "Work updated")
+    return " ".join(str(headline).split())
 
 
 async def claim(pool: asyncpg.Pool, run_id: int, data: ClaimIn) -> Run:
@@ -147,10 +263,15 @@ async def attach_artifact(pool: asyncpg.Pool, run_id: int, data: ArtifactIn) -> 
     async with pool.acquire() as conn, conn.transaction():
         await _load(conn, run_id)
         artifact = await repo.add_artifact(conn, run_id, data)
-        if data.kind == "diff":
+        event_type = {
+            "diff": "diff_attached",
+            "revision_base": "revision_base_attached",
+            "revision_diff": "revision_diff_attached",
+        }.get(data.kind)
+        if event_type:
             await repo.append_event(
                 conn, run_id,
-                EventIn(type="diff_attached", actor="builder",
+                EventIn(type=event_type, actor="builder",
                         payload={"artifact_id": artifact.id}),
             )
         return artifact
@@ -164,7 +285,7 @@ async def decide(pool: asyncpg.Pool, run_id: int, data: DecisionIn) -> Run:
         await repo.append_event(
             conn, run_id,
             EventIn(type=_DECISION_EVENT[data.decision], actor=data.actor,
-                    payload={"note": data.note}),
+                    payload={"note": data.note, "decision": data.decision}),
         )
         await repo.set_state(conn, run_id, new_state)
         updated = await repo.get_run(conn, run_id)

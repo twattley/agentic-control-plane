@@ -112,6 +112,69 @@ def _git_diff(repo_path: str) -> str:
     return out.stdout
 
 
+def _incremental_diff(repo_path: str, baseline_content: str) -> str:
+    """Diff the staged candidate against a persisted human checkpoint.
+
+    The captured tree is independent of later HEAD movement. The real index
+    remains the full candidate the reviewer sees.
+    """
+    baseline = json.loads(baseline_content)
+    return subprocess.run(
+        ["git", "-C", repo_path, "diff", "--cached", str(baseline["tree"])],
+        cwd=repo_path, capture_output=True, text=True, check=True,
+    ).stdout
+
+
+def _revision_base_content(repo_path: str) -> str:
+    """Persist the exact staged tree at the start of one human revision."""
+    _stage_all(repo_path)
+    tree = subprocess.run(
+        ["git", "-C", repo_path, "write-tree"],
+        cwd=repo_path, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return json.dumps({"version": 1, "tree": tree})
+
+
+def _open_revision_base(detail):
+    """Return the baseline for the agent loop that has not reached a human."""
+    base_event = next(
+        (event for event in reversed(detail.events)
+         if event.type == "revision_base_attached"),
+        None,
+    )
+    if base_event is None:
+        return None
+    checkpoint = next(
+        (event for event in reversed(detail.events)
+         if isinstance(event.payload.get("revision"), dict)),
+        None,
+    )
+    if checkpoint is not None and checkpoint.id > base_event.id:
+        return None
+    artifact_id = base_event.payload.get("artifact_id")
+    artifact = next(
+        (artifact for artifact in detail.artifacts if artifact.id == artifact_id),
+        None,
+    )
+    if artifact is None:
+        return None
+    try:
+        snapshot = json.loads(artifact.content)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return artifact if isinstance(snapshot, dict) and snapshot.get("tree") else None
+
+
+async def _ensure_revision_base(pool, run_id: int, detail, repo_path: str):
+    existing = _open_revision_base(detail)
+    if existing is not None:
+        return existing
+    return await runs_service.attach_artifact(
+        pool, run_id,
+        ArtifactIn(kind="revision_base", content=_revision_base_content(repo_path)),
+    )
+
+
 async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) -> str:
     """Run one agent pass. Returns 'skipped' | 'done'. Safe to call twice —
     the loser of the claim race returns 'skipped'."""
@@ -135,6 +198,10 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
     except (IllegalTransitionError, LeaseConflictError, runs_service.RunNotFoundError):
         return "skipped"
 
+    revision_base = None
+    if role == "builder":
+        revision_base = await _ensure_revision_base(pool, run_id, detail, repo.path)
+
     result = subprocess.run(
         _agent_command(role, provider, task, repo.path),
         cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
@@ -146,8 +213,14 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         # the index from stale or already-staged artifact files.
         evidence = _capture_evidence(repo.path, run_id)
         diff = _git_diff(repo.path)
+        revision_diff = _incremental_diff(repo.path, revision_base.content)
         if diff.strip():
             await runs_service.attach_artifact(pool, run_id, ArtifactIn(kind="diff", content=diff))
+        # Empty is meaningful: it prevents the reviewer checkpoint from
+        # reusing a stale revision delta from an earlier human turn.
+        await runs_service.attach_artifact(
+            pool, run_id, ArtifactIn(kind="revision_diff", content=revision_diff)
+        )
         if evidence:
             await runs_service.attach_artifact(
                 pool, run_id, ArtifactIn(kind="evidence", content=evidence)
@@ -155,7 +228,8 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         await runs_service.record_event(
             pool, run_id,
             EventIn(type="builder_brief_posted", actor="builder",
-                    payload={"summary": summary, "provider": provider}),
+                    payload={"summary": summary, "headline": _headline(summary),
+                             "provider": provider}),
         )
     else:
         verdict = _parse_verdict(result.stdout or "", provider)
@@ -166,11 +240,33 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         outcome = _review_outcome(verdict, prior_changes, settings.max_review_rounds)
         if outcome.escalated:
             summary = f"[escalated to human after {prior_changes} change rounds] {summary}"
+        payload = {
+            "verdict": outcome.verdict,
+            "escalated": outcome.escalated,
+            "summary": summary,
+            "provider": provider,
+        }
+        if outcome.verdict == "pass" or outcome.escalated:
+            revision_diff = next(
+                (artifact for artifact in reversed(detail.artifacts)
+                 if artifact.kind == "revision_diff"),
+                None,
+            )
+            brief = next(
+                (event for event in reversed(detail.events)
+                 if event.type == "builder_brief_posted"),
+                None,
+            )
+            payload["revision"] = {
+                "headline": (
+                    brief.payload.get("headline") if brief else "Work updated"
+                ),
+                "diff_artifact_id": revision_diff.id if revision_diff else None,
+            }
         await runs_service.record_event(
             pool, run_id,
             EventIn(type="reviewer_findings_posted", actor="reviewer",
-                    payload={"verdict": outcome.verdict, "escalated": outcome.escalated,
-                             "summary": summary, "provider": provider}),
+                    payload=payload),
         )
     return "done"
 
@@ -303,6 +399,17 @@ def _summary(stdout: str, provider: str, role: str) -> str:
     budget = _FINDINGS_CHARS if role == "reviewer" else _BRIEF_CHARS
     message = _agent_message(stdout, provider).strip()[:budget]
     return message or f"{provider} {role} pass complete"
+
+
+def _headline(summary: str) -> str:
+    """The builder's deliberate SUMMARY line, with a first-line fallback."""
+    lines = [line.strip() for line in summary.splitlines() if line.strip()]
+    explicit = next(
+        (line.partition(":")[2].strip() for line in lines
+         if line.lower().startswith("summary:")),
+        None,
+    )
+    return " ".join((explicit or (lines[0] if lines else "Work updated")).split())
 
 
 def _parse_verdict(stdout: str, provider: str) -> str:
@@ -438,6 +545,8 @@ def _evidence_invitation(run_id: int) -> str:
     """Invite evidence; never require it. Work with nothing to demonstrate — a
     refactor, a rename — writes nothing, and that is a complete pass."""
     return (
+        " Begin your final reply with exactly one line 'SUMMARY: <one sentence>': "
+        "a plain-language description of the completed code change for the human."
         " Optional: if this change has a demonstrable outcome, write markdown to "
         f".agent-artifacts/{run_id}.md — a table of the ticket's scenarios with real "
         "inputs and the ACTUAL outputs you got from running the code, never claims "

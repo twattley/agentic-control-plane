@@ -5,7 +5,7 @@ round receives (`_INSTRUCTION_SOURCES['reviewer_findings_posted']`). Findings
 that name a file, a line and a change do not fit in a builder brief's budget.
 """
 
-from app.worker import _summary
+from app.worker import _headline, _summary
 
 FINDING = (
     "apps/api/app/worker.py:142 - the summary is capped before it reaches the "
@@ -43,3 +43,16 @@ def test_claude_json_is_unwrapped_before_the_budget_applies():
     stdout = '{"result": "' + "x" * 700 + '"}'
 
     assert _summary(stdout, "claude", "reviewer") == "x" * 700
+
+
+def test_builder_headline_is_the_deliberate_first_line():
+    assert _headline(
+        "SUMMARY: Add three loading dots\n\nLong implementation detail."
+    ) == "Add three loading dots"
+
+
+def test_builder_headline_finds_summary_after_a_handoff_preamble():
+    assert _headline(
+        "Everything passes and is ready for review.\n\n"
+        "SUMMARY: Add three loading dots\n\nNext step: review it."
+    ) == "Add three loading dots"

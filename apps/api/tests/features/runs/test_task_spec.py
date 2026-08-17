@@ -21,6 +21,7 @@ def test_builder_task_points_at_ticket_file_when_present(tmp_path):
     task = _task_for(_detail(), "builder", str(tmp_path))
 
     assert "tickets/SBX-3.md" in task
+    assert "SUMMARY: <one sentence>" in task
 
 
 def test_builder_task_has_no_spec_pointer_without_a_ticket_file(tmp_path):

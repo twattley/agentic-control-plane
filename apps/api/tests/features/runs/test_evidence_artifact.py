@@ -214,6 +214,7 @@ async def test_artifact_kind_is_a_closed_contract(client, db):
     assert accepted.status_code < 300
     assert set(ArtifactIn.model_json_schema()["properties"]["kind"]["enum"]) == {
         "diff", "test_output", "screenshot", "log", "evidence",
+        "revision_base", "revision_diff",
     }
 
 

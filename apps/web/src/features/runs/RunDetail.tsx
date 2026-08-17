@@ -1,6 +1,4 @@
-import type {
-  Artifact, ArtifactKind, Event, RunDetail as RunDetailData,
-} from '@agentic-control-plane/domain-types'
+import type { Event, RunDetail as RunDetailData } from '@agentic-control-plane/domain-types'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useDecide, useDispatch, usePostEvent, useRun } from '../../api/hooks'
@@ -13,14 +11,6 @@ const DISPATCHABLE = ['queued', 'awaiting_review', 'needs_work']
 function payloadText(e: Event): string {
   const p = e.payload as Record<string, unknown>
   return (p.summary ?? p.brief ?? p.findings ?? p.note ?? p.text ?? '') as string
-}
-
-function latest(events: Event[], type: string): Event | undefined {
-  return [...events].reverse().find((e) => e.type === type)
-}
-
-function latestArtifact(artifacts: Artifact[], kind: ArtifactKind): Artifact | undefined {
-  return [...artifacts].reverse().find((a) => a.kind === kind)
 }
 
 function ReRunButton({ id }: { id: number }) {
@@ -189,12 +179,9 @@ export function RunDetailPage() {
 
   if (isLoading || !data) return <p className="p-4 text-slate-400">loading…</p>
 
-  const { run, events, artifacts } = data
-  const brief = latest(events, 'builder_brief_posted')
-  const briefText = brief ? payloadText(brief).replace(/\s+/g, ' ').trim() : ''
+  const { run, events, revisions, pending_revision_request: pendingRequest } = data
   const gate = [...events].reverse()
     .find((e) => e.type === 'gate_passed' || e.type === 'gate_failed')
-  const diff = latestArtifact(artifacts, 'diff')
 
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col">
@@ -209,16 +196,48 @@ export function RunDetailPage() {
             <p className="text-sm text-slate-500">{run.ticket_id}</p>
             {DISPATCHABLE.includes(run.state) && <ReRunButton id={run.id} />}
           </div>
-          {briefText && <p className="truncate text-sm text-slate-600">{briefText}</p>}
         </header>
 
         {gate && <CloseGate event={gate} />}
 
-        {diff && (
-          <Panel title="Diff">
-            <DiffView content={diff.content} />
-          </Panel>
-        )}
+        <div className="space-y-6">
+          {revisions.map((revision, index) => (
+            <article
+              key={revision.checkpoint_event_id}
+              className={index === 0 ? 'space-y-3' : 'space-y-3 border-t border-slate-200 pt-6'}
+            >
+              {revision.request && (
+                <div className="border-l-2 border-amber-300 pl-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    You requested changes
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                    {revision.request}
+                  </p>
+                </div>
+              )}
+              <p className="truncate text-sm text-slate-600">{revision.headline}</p>
+              {revision.diff && (
+                <Panel title="Diff">
+                  <DiffView content={revision.diff} />
+                </Panel>
+              )}
+            </article>
+          ))}
+
+          {pendingRequest && (
+            <div className="border-t border-slate-200 pt-6">
+              <div className="border-l-2 border-amber-300 pl-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  You requested changes
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                  {pendingRequest.text}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
       </div>
 

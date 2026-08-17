@@ -15,9 +15,16 @@ export type RunState =
   | 'blocked'
 
 export type Role = 'builder' | 'reviewer' | 'human'
-/** `evidence` is optional markdown a builder leaves to demonstrate the outcome
- * — a case table of real inputs and actual outputs. */
-export type ArtifactKind = 'diff' | 'test_output' | 'screenshot' | 'log' | 'evidence'
+/** `diff` remains the reviewer's full candidate. Revision artifacts preserve
+ * human checkpoint baselines and their incremental response diffs. */
+export type ArtifactKind =
+  | 'diff'
+  | 'test_output'
+  | 'screenshot'
+  | 'log'
+  | 'evidence'
+  | 'revision_base'
+  | 'revision_diff'
 export type Decision = 'approve' | 'request_changes' | 'block' | 'close'
 export type QueueName = 'review' | 'fix' | 'human'
 
@@ -120,12 +127,29 @@ export interface DecisionInput {
   actor?: string
 }
 
+export interface RunRevision {
+  checkpoint_event_id: number
+  request_event_id: number | null
+  request: string | null
+  headline: string
+  diff: string
+  created_at: string
+}
+
+export interface RevisionRequest {
+  event_id: number
+  text: string
+  created_at: string
+}
+
 /** Everything the phone needs to render one run. Mirrors RunDetail. */
 export interface RunDetail {
   run: Run
   events: Event[]
   artifacts: Artifact[]
   leases: Lease[]
+  revisions: RunRevision[]
+  pending_revision_request: RevisionRequest | null
 }
 
 /** A markdown file in the repo checkout's tickets/ folder. Mirrors Ticket. */
