@@ -40,17 +40,14 @@ def test_reviewer_task_points_at_ticket_file_when_present(tmp_path):
     assert "VERDICT" in task
 
 
-def test_reviewer_task_requires_located_actionable_findings(tmp_path):
-    """One anchor per contract clause, not the prompt's wording — a copy edit
-    that keeps the contract should not fail this test."""
+def test_reviewer_task_composes_the_verdict_contract(tmp_path):
+    """The located-findings method moved to the kit (ae-022/acp-034); what
+    the plane still owns here is the machine-readable verdict format its
+    parser greps for."""
     task = _task_for(_detail(), "reviewer", str(tmp_path))
 
-    assert "blocking finding" in task  # findings are enumerated, not prose
-    assert "name the file and the line" in task  # located
-    assert "the specific change required" in task  # actionable
-    assert "judgment call" in task  # exempt from a single correct fix...
-    assert "name its location" in task  # ...but never from a location
-    assert "no blocking findings, do not invent" in task  # a pass stays a pass
+    assert "VERDICT: pass" in task
+    assert "VERDICT: changes" in task
 
 
 def test_fix_pass_keeps_spec_pointer(tmp_path):
@@ -457,32 +454,12 @@ def test_verdict_refusal_carries_the_findings_that_prevented_close(tmp_path):
     assert "apps/api/app/worker.py:533 — preserve the located fix." in task
 
 
-def test_builder_task_states_the_role_boundary(tmp_path):
-    task = _task_for(_detail(), "builder", str(tmp_path))
-
-    assert "do not claim the reviewer role" in task.lower()
-    assert "close_ticket" in task
-    assert "do not commit" in task.lower()
-
-
-def test_fix_pass_keeps_the_role_boundary(tmp_path):
-    findings = SimpleNamespace(
-        type="reviewer_findings_posted", payload={"summary": "fix the loop"}
-    )
-
-    task = _task_for(_detail(events=[findings]), "builder", str(tmp_path))
-
-    assert "do not claim the reviewer role" in task.lower()
-
-
-def test_reviewer_task_carries_no_builder_boundary(tmp_path):
-    task = _task_for(_detail(), "reviewer", str(tmp_path))
-
-    assert "do not claim the reviewer role" not in task.lower()
-    assert "do not commit" not in task.lower()
-
-
-def test_tdd_builder_task_states_the_role_boundary(tmp_path):
-    task = _task_for(_detail(mode="tdd"), "builder", str(tmp_path))
-
-    assert "do not claim the reviewer role" in task.lower()
+def test_role_method_is_the_kits_not_the_planes(tmp_path):
+    """acp-034: the role's method — the boundary, the located-findings
+    demand — lives in the kit's ROLE.md and is composed at dispatch by
+    _with_role_method (pinned in test_role_method.py). _task_for itself
+    carries only run context and the plane's output contracts."""
+    for role in ("builder", "reviewer"):
+        task = _task_for(_detail(), role, str(tmp_path))
+        assert "do not claim the reviewer role" not in task.lower()
+        assert "name the file and the line" not in task.lower()

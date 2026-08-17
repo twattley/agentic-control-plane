@@ -13,16 +13,14 @@ contract, and the inline duplicate is deleted.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 12:33 BST - dependency satisfied: ae-022 closed (kit
-  commit 80e72a2) and synced to both installed layers (~/.claude/skills and
-  ~/.agents/skills — the codex-visible path, useful when implementing).
-- Next: builder claims — once the worker lane (029/031/032/033) has drained
-  `apps/api/app/worker.py`; this ticket goes last by design.
+- State: complete
+- Phase: done
+- Started: 2026-08-17
+- Updated: 2026-08-17 14:03
+- Completed: 2026-08-17 14:03
+- Last: close-ticket verified reviewer run 79422c10f21ea4e7 and close gate passed
+  (independent, no issues; gates green)
+- Next: closed
 
 ## Why
 

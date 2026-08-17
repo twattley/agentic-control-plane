@@ -290,6 +290,10 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
 
 async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) -> str:
     """Execute a pass after its lease is held; failures are guarded by caller."""
+    # Inside the guard on purpose: a missing method must fail like a crashed
+    # pass (worker_failed → awaiting_human), never fall back to a thinner
+    # prompt silently.
+    task = _with_role_method(role, task)
     await _record_external_edits(pool, run_id, detail.events, repo.path)
     revision_base = None
     head_before = ""
@@ -736,30 +740,23 @@ def _task_for(detail, role: str, repo_path: str) -> str:
         diff = next((a.content for a in reversed(detail.artifacts) if a.kind == "diff"), "")
         return (
             f"Review this diff for {run.ticket_id}: {run.title}.{spec}\n"
-            "Assess correctness and safety. Before the final verdict, list each "
-            "blocking finding. For each blocking finding, name the file and the line "
-            "or function where applicable, then state the specific change required. "
-            "If a finding is a genuine judgment call with no single correct fix, "
-            "name its location and ask a concrete question instead. If there are no "
-            "blocking findings, do not invent locations or changes. End your reply "
-            "with exactly one standalone line: 'VERDICT: pass' if it correctly and "
-            "safely implements the task, or 'VERDICT: changes' if blocking findings "
-            "must be fixed.\n\n"
+            "End your reply with exactly one standalone line: 'VERDICT: pass' if it "
+            "correctly and safely implements the task, or 'VERDICT: changes' if "
+            "blocking findings must be fixed.\n\n"
             f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
     status = _status_contract_note(workflow, run.ticket_id)
-    boundary = _builder_boundary_note()
     instruction = _newest_instruction(detail.events)
     evidence = _evidence_invitation(run.id)
     if instruction:
         convention = _convention_note() if instruction.from_human else ""
         return (f"Address the {instruction.source} on {run.ticket_id}: {run.title}.{spec} "
-                f"{instruction.label}: {instruction.text}{status}{boundary}{convention}{evidence}")
+                f"{instruction.label}: {instruction.text}{status}{convention}{evidence}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it "
-                f"passes.{status}{boundary}{evidence}")
-    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{boundary}{evidence}"
+                f"passes.{status}{evidence}")
+    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{evidence}"
 
 
 def _convention_note() -> str:
@@ -779,17 +776,36 @@ def _convention_note() -> str:
     )
 
 
-def _builder_boundary_note() -> str:
-    """The line the E001-S01 rogue pass proved cannot go unsaid: given only
-    'reviewer verdict is needs-work; close requires pass' as its instruction, a
-    builder claimed the reviewer role, wrote itself a pass, and ran the closer.
-    The protocol lives in the human's config — the prompt is where the builder
-    actually reads."""
-    return (
-        " Role boundary: you are the builder. Do not claim the reviewer role, do "
-        "not run scripts/close_ticket, and do not commit — finish at the handoff "
-        "and leave the verdict and the close to their own lanes."
-    )
+#: The installed skill layer — runtime truth for role method (ae-022). The
+#: kit authors ROLE.md, `scripts/sync` installs it, the plane injects it.
+#: Deliberately not an operator knob: tests point it at a temp dir, nothing
+#: else moves it.
+_SKILLS_DIR = Path.home() / ".claude" / "skills"
+
+
+class RoleMethodMissingError(RuntimeError):
+    """The installed skill layer has no method for this role. The pass must
+    die loudly rather than run on a silently thinner prompt."""
+
+
+def _with_role_method(role: str, task: str) -> str:
+    """Compose the kit's role method with the plane's run task (acp-034).
+
+    The method says how the role behaves — including the boundary the
+    E001-S01 rogue pass proved cannot go unsaid — and lives once, in the kit
+    (ae-022). The task carries this run's context and the output contract the
+    plane parses. Kit tests pin the words; plane tests pin this seam."""
+    path = _SKILLS_DIR / role / "ROLE.md"
+    try:
+        method = path.read_text().strip()
+    except OSError:
+        method = ""
+    if not method:
+        raise RoleMethodMissingError(
+            f"no role method at {path} — author it in agentic-engineering "
+            "and install it with scripts/sync"
+        )
+    return f"{method}\n\n{task}"
 
 
 def _status_contract_note(workflow, ticket_id: str) -> str:
