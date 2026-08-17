@@ -309,9 +309,18 @@ def _newest_instruction(events) -> _Instruction | None:
     return None
 
 
+#: The phase the portable closer requires before it will close a v1 story
+#: (ticket_contract.STORY_REVIEW_PHASE). The conformance test pins this against
+#: the real kit, so a rename on either side fails a test instead of a lap.
+REVIEW_PHASE = "review-loop"
+
+_STATUS_FIELDS = ("State", "Phase", "Started", "Updated", "Completed", "Last", "Next")
+
+
 def _task_for(detail, role: str, repo_path: str) -> str:
     run = detail.run
-    spec = _spec_note(repo_path, run.ticket_id)
+    workflow = workflow_repo.load_workflow(repo_path)
+    spec = _spec_note(repo_path, workflow, run.ticket_id)
     if role == "reviewer":
         diff = next((a.content for a in reversed(detail.artifacts) if a.kind == "diff"), "")
         return (
@@ -321,16 +330,38 @@ def _task_for(detail, role: str, repo_path: str) -> str:
             "'VERDICT: changes' followed by what must be fixed.\n\n"
             f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
+    status = _status_contract_note(workflow, run.ticket_id)
     instruction = _newest_instruction(detail.events)
     evidence = _evidence_invitation(run.id)
     if instruction:
         return (f"Address the {instruction.source} on {run.ticket_id}: {run.title}.{spec} "
-                f"{instruction.label}: {instruction.text}{evidence}")
+                f"{instruction.label}: {instruction.text}{status}{evidence}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it "
-                f"passes.{evidence}")
-    return f"Implement {run.ticket_id}: {run.title}.{spec}{evidence}"
+                f"passes.{status}{evidence}")
+    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{evidence}"
+
+
+def _status_contract_note(workflow, ticket_id: str) -> str:
+    """What the builder must and must not do to a v1 story's Status block.
+
+    S001's builder wrote a phase the portable closer rejects and dropped two
+    required fields — three of the four hand repairs its close needed. Legacy
+    tickets are exempt: they close at a different phase, and instructing the
+    v1 vocabulary there would recreate the mismatch in the other direction.
+    """
+    if not any(s.story_id == ticket_id for s in workflow.stories):
+        return ""
+    fields = ", ".join(_STATUS_FIELDS)
+    return (
+        " Ticket status contract: the file has exactly one '## Status' block — keep it "
+        f"that way, and keep every field it carries: {fields}. Update values, never "
+        "remove lines: set Started when you begin if it is still '—', keep Updated "
+        "current, and leave Completed as '—' (the closer stamps it). When you hand "
+        f"the work to review, set 'Phase: {REVIEW_PHASE}' — the closer accepts no "
+        "other phase name."
+    )
 
 
 def _evidence_invitation(run_id: int) -> str:
@@ -361,10 +392,9 @@ def _evidence_review_note(detail) -> str:
     )
 
 
-def _spec_note(repo_path: str, ticket_id: str) -> str:
+def _spec_note(repo_path: str, workflow, ticket_id: str) -> str:
     """If the checkout has a ticket file for this run, every prompt points at it —
     the file, not the run title, is the full spec."""
-    workflow = workflow_repo.load_workflow(repo_path)
     try:
         document = workflow_repo.document_from_workflow(
             repo_path, workflow, ticket_id

@@ -290,3 +290,73 @@ async def test_prompt_resolution_failure_leaves_worker_run_unclaimed(
 
     detail = await runs_service.run_detail(db, run_response.json()["id"])
     assert detail.run.state == "queued"
+
+
+def _v1_story_repo(tmp_path, story_id="E001-S00"):
+    """A snapshot-tool repo with one resolvable v1 story."""
+    story_file = tmp_path / "tickets" / "ready" / f"{story_id}-do-a-thing.md"
+    story_file.parent.mkdir(parents=True)
+    story_file.write_text("# Do a thing")
+    payload = {
+        "schema_version": "agent-workflow-snapshot-v1",
+        "ticket_contract": "epic-story-v1",
+        "epics": [],
+        "stories": [{
+            "kind": "story", "story_id": story_id, "epic_id": "E001",
+            "coordination_class": "feature", "state": "ready",
+            "title": "Do a thing", "path": f"tickets/ready/{story_id}-do-a-thing.md",
+            "claimable_roles": ["builder"], "diagnostic_codes": [],
+        }],
+        "legacy": [], "runs": [], "diagnostics": [],
+    }
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    command = scripts / "agent_workflow"
+    command.write_text("#!/bin/sh\n" + f"printf '%s\\n' '{json.dumps(payload)}'\n")
+    command.chmod(0o755)
+
+
+def test_builder_task_for_a_v1_story_carries_the_status_contract(tmp_path):
+    """S001's builder wrote 'Phase: review-ready' and dropped Started and
+    Completed — three of the four hand repairs its close needed. The prompt is
+    where the plane states the portable contract the file must keep satisfying."""
+    _v1_story_repo(tmp_path)
+
+    task = _task_for(_detail(ticket_id="E001-S00"), "builder", str(tmp_path))
+
+    assert "Phase: review-loop" in task
+    for field in ("State", "Phase", "Started", "Updated", "Completed", "Last", "Next"):
+        assert field in task
+    assert "exactly one" in task  # never a second ## Status block
+
+
+def test_fix_pass_for_a_v1_story_keeps_the_status_contract(tmp_path):
+    _v1_story_repo(tmp_path)
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "fix the loop"}
+    )
+
+    task = _task_for(_detail(ticket_id="E001-S00", events=[findings]), "builder", str(tmp_path))
+
+    assert "fix the loop" in task
+    assert "Phase: review-loop" in task
+
+
+def test_reviewer_task_carries_no_status_contract(tmp_path):
+    """The reviewer is read-only; instructing it to edit status invites edits."""
+    _v1_story_repo(tmp_path)
+
+    task = _task_for(_detail(ticket_id="E001-S00"), "reviewer", str(tmp_path))
+
+    assert "Phase: review-loop" not in task
+
+
+def test_legacy_flat_builder_task_carries_no_status_contract(tmp_path):
+    """Legacy tickets close at Phase: review, not review-loop — instructing the
+    v1 vocabulary there would recreate the mismatch in the other direction."""
+    (tmp_path / "tickets").mkdir()
+    (tmp_path / "tickets" / "SBX-3.md").write_text("# spec")
+
+    task = _task_for(_detail(), "builder", str(tmp_path))
+
+    assert "review-loop" not in task

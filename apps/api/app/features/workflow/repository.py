@@ -188,14 +188,70 @@ def create_story(repo_path: str, data: StoryCreateIn) -> AuthoredStory:
 
 def _merge_story_body(skeleton: str, body: str) -> str:
     """Keep the tool's title/Identity/Status header; replace everything from
-    `## Story` down with the shaped body."""
-    head, sep, _ = skeleton.partition("\n## Story\n")
+    `## Story` down with the shaped body. A `## Status` section arriving in the
+    body is reconciled into the skeleton's block, never appended beside it —
+    the portable tools read the first status match in the file, so a second
+    block is not clutter but a stale answer sitting in front of the real one."""
+    body, incoming_status = _split_status_section(body)
+    head, _, _ = skeleton.partition("\n## Story\n")
+    head = _reconcile_status(head, incoming_status)
     content = body.strip()
     if not content.startswith("#"):
         content = "## Story\n\n" + content
-    if not sep:
-        return skeleton.rstrip() + "\n\n" + content + "\n"
     return head.rstrip() + "\n\n" + content + "\n"
+
+
+_STATUS_SECTION = re.compile(r"^## Status[ \t]*$\n.*?(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+_STATUS_LINE = re.compile(r"^- (?P<field>[A-Za-z][A-Za-z ]*):[ \t]*(?P<value>.*)$", re.MULTILINE)
+#: Same shape the portable contract uses to ignore documented examples: a
+#: fenced ``` block is prose about the format, never the format itself.
+_FENCED_BLOCK = re.compile(
+    r"^(?P<fence>```+|~~~+).*?(?:^(?P=fence)[ \t]*$|\Z)", re.MULTILINE | re.DOTALL
+)
+_STATUS_PLACEHOLDER = "—"
+
+#: History facts worth carrying across a merge. Lifecycle fields (State, Phase)
+#: are deliberately NOT carried: the story re-enters the lifecycle where the
+#: file now lives, and legacy phase vocabulary ("review-ready") is exactly what
+#: the portable closer rejects.
+_CARRIED_STATUS_FIELDS = ("Started", "Completed")
+
+
+def _mask_fenced_blocks(text: str) -> str:
+    """Blank fenced content, preserving offsets, so section matches on the
+    masked text slice back into the original."""
+    return _FENCED_BLOCK.sub(
+        lambda m: "".join("\n" if c == "\n" else " " for c in m.group(0)), text
+    )
+
+
+def _split_status_section(body: str) -> tuple[str, dict[str, str]]:
+    """Strip every real `## Status` section from the body; return its field
+    values, first occurrence winning. A fenced status example is documentation
+    and stays exactly where it is."""
+    fields: dict[str, str] = {}
+    while True:
+        masked = _mask_fenced_blocks(body)
+        match = _STATUS_SECTION.search(masked)
+        if match is None:
+            return body, fields
+        for line in _STATUS_LINE.finditer(masked[match.start():match.end()]):
+            fields.setdefault(line.group("field"), line.group("value").strip())
+        body = body[: match.start()] + body[match.end():]
+
+
+def _reconcile_status(head: str, incoming: dict[str, str]) -> str:
+    """Fill the skeleton's placeholder fields from the incoming status. Only
+    placeholders: a real skeleton value is never overwritten."""
+    for field in _CARRIED_STATUS_FIELDS:
+        value = incoming.get(field, "")
+        if value and value != _STATUS_PLACEHOLDER:
+            head = re.sub(
+                rf"^- {field}: {_STATUS_PLACEHOLDER}$",
+                lambda _, field=field, value=value: f"- {field}: {value}",
+                head, count=1, flags=re.MULTILINE,
+            )
+    return head
 
 
 def adopt_legacy(

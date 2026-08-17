@@ -13,13 +13,22 @@ the plane creates and drives must satisfy the portable contract at every step.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-16
+- State: in-progress
+- Phase: review done, awaiting human review
+- Started: 2026-08-17
+- Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-16 - shaped after S001 needed four manual repairs to close
-- Next: builder claims
+- Last: 2026-08-17 - built test-first by claude, reviewed by standards-reviewer
+  (nothing blocking; all four load-bearing findings fixed: backslash-unsafe
+  re.sub replacement, fence-unaware status stripping that ate documented
+  examples, the field list not pinned against the kit, and kit discovery that
+  could silently skip — now env-overridable with ACP_REQUIRE_PORTABLE_KIT=1 to
+  fail instead). Residual risk, accepted: repairs 2-4 are prompt-enforced —
+  nothing deterministically validates the Status block before close; acp-016's
+  delegation to close_ticket is the natural backstop (its refusals become the
+  enforcement). Red-check performed: stashing the fix fails 4 tests on exactly
+  the S001 defects. 168 pytest, ruff clean.
+- Next: human review, then close + commit
 
 ## Why
 
@@ -97,11 +106,23 @@ uv run --project apps/api pytest apps/api/tests/
 
 ## Done When
 
-- [ ] A story adopted from a legacy ticket has exactly one `## Status` block.
-- [ ] The status block written during a run carries `Started` and `Completed`.
-- [ ] The phase the plane writes is the phase the portable closer expects, with
-      the divergence resolved in one direction rather than both tolerated.
-- [ ] A conformance test drives a plane-authored story through a run's status
-      transitions and asserts the portable contract accepts it — using the
-      portable parser, so a drift on either side fails the test.
-- [ ] Closing a plane-driven ticket requires no manual edit to the file.
+- [x] A story adopted from a legacy ticket has exactly one `## Status` block.
+      (`_merge_story_body` reconciles the incoming status into the skeleton's:
+      Started/Completed history carried into placeholders, lifecycle fields
+      deliberately dropped, fenced examples left as documentation.)
+- [x] The status block written during a run carries `Started` and `Completed`.
+      (The skeleton always has all seven fields; the builder prompt now states
+      the contract — update values, never remove lines — and the field list is
+      pinned against the kit's `REQUIRED_STORY_STATUS_FIELDS`.)
+- [x] The phase the plane writes is the phase the portable closer expects.
+      (The plane moved: `worker.REVIEW_PHASE = "review-loop"`, pinned equal to
+      the kit's `STORY_REVIEW_PHASE` by the conformance test. Legacy tickets
+      exempt — they close at "review".)
+- [x] A conformance test drives a plane-authored story through a run's status
+      transitions and asserts the portable contract accepts it.
+      (`test_portable_close_conformance.py`: real kit symlinked as production
+      repos have it, kit's own `ticket_contract.py` imported for parsing, kit's
+      `claim`/`post-findings` for the run, real `close_ticket` at the end.)
+- [x] Closing a plane-driven ticket requires no manual edit to the file.
+      (The lap test performs only the instructed review-handoff transition and
+      close_ticket exits 0.)
