@@ -16,13 +16,13 @@ parallel work" rule makes the ticket second-class from birth.
 
 ## Status
 
-- State: in-progress
-- Phase: review
+- State: complete
+- Phase: done
 - Started: 2026-08-17 11:39:39 BST
-- Updated: 2026-08-17 11:46:45 BST
-- Completed: —
-- Last: 2026-08-17 11:46:45 BST - builder run 55a686321c79c19f, gate green.
-- Next: reviewer claims run 55a686321c79c19f.
+- Updated: 2026-08-17 12:13
+- Completed: 2026-08-17 12:13
+- Last: close-ticket verified reviewer run 55a686321c79c19f and close gate passed
+- Next: closed
 
 ## Why
 

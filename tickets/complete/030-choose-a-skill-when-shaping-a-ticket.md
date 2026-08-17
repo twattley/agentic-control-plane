@@ -13,17 +13,13 @@ browser and the terminal reach the same quality of ticket.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - open questions resolved with the owner: dropdown from
-  discovered skill directories, per-discussion, chosen at start. Sequenced
-  behind 028, which rewrites the same prompt seam this ticket makes swappable.
-  Renumbered from 011 (never started) so the shaping lane reads in order.
-- Next: builder claims — after 028 lands (shared write scope on
-  `discussion_agent.py` and `discussions/**`)
+- State: complete
+- Phase: done
+- Started: 2026-08-17 12:25:58 BST
+- Updated: 2026-08-17 12:53
+- Completed: 2026-08-17 12:53
+- Last: close-ticket verified reviewer run d644c0c06412cea3 and close gate passed
+- Next: closed
 
 ## Why
 
@@ -81,9 +77,12 @@ can be read back knowing how it was produced.
 ## Scope
 
 - `allowed_paths`:
-  - `apps/api/app/features/discussions/**`
+  - `apps/api/app/features/discussions/controller.py`
+  - `apps/api/app/features/discussions/models.py`
+  - `apps/api/app/features/discussions/repository.py`
   - `apps/api/app/services/discussion_agent.py`
-  - `apps/api/tests/features/discussions/**`
+  - `apps/api/schema/007_discussion_skill.sql`
+  - `apps/api/tests/features/discussions/test_discussions_api.py`
   - `apps/web/src/features/projects/DiscussionPanel.tsx`
   - `apps/web/src/api/hooks.ts`
   - `packages/domain-types/src/index.ts`
@@ -92,7 +91,6 @@ can be read back knowing how it was produced.
   - `ARCHITECTURE.md`
 - `forbidden_paths`:
   - `apps/api/app/services/state_machine.py`
-  - `apps/api/schema/**`
 - `depends_on`:
   - `028-a-ticket-shaped-in-the-ui-must-meet-the-contract-the-loop-enforces`
     (soft: no logical dependency, but 028 rewrites `_SYSTEM`/`FREEZE_PROMPT`

@@ -318,8 +318,19 @@ export interface Discussion {
   session_id: string | null
   state: DiscussionState
   ticket_slug: string | null
+  skill_name: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ShapingSkill {
+  name: string
+  description: string
+}
+
+export interface DiscussionStartInput {
+  message: string
+  skill_name?: string
 }
 
 export interface DiscussionMessage {

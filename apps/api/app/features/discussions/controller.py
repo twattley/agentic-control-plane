@@ -11,6 +11,7 @@ from app.features.discussions.models import (
     DiscussionStartIn,
     FreezeIn,
     MessageIn,
+    SkillSummary,
 )
 from app.features.repos import repository as repos_repo
 from app.features.repos.models import Repo
@@ -58,8 +59,16 @@ async def _turn(repo: Repo, disc: Discussion, message: str) -> DiscussionDetail:
     """One bounce: record the human message, run the agent in the checkout,
     record its reply. An agent failure records nothing."""
     pool = await get_pool()
+    skill = _skill_or_422(repo, disc.skill_name)
     try:
-        session_id, text = await discussion_agent.reply(repo.path, message, disc.session_id)
+        if skill is None:
+            session_id, text = await discussion_agent.reply(
+                repo.path, message, disc.session_id
+            )
+        else:
+            session_id, text = await discussion_agent.reply(
+                repo.path, message, disc.session_id, skill.prompt
+            )
     except AgentError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from None
     await repository.add_message(pool, disc.id, "human", message)
@@ -71,7 +80,10 @@ async def _turn(repo: Repo, disc: Discussion, message: str) -> DiscussionDetail:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def start_discussion(repo_id: int, data: DiscussionStartIn) -> DiscussionDetail:
     repo = await _repo_or_404(repo_id)
-    disc = await repository.create_discussion(await get_pool(), repo_id)
+    _skill_or_422(repo, data.skill_name)
+    disc = await repository.create_discussion(
+        await get_pool(), repo_id, data.skill_name
+    )
     return await _turn(repo, disc, data.message)
 
 
@@ -79,6 +91,15 @@ async def start_discussion(repo_id: int, data: DiscussionStartIn) -> DiscussionD
 async def list_discussions(repo_id: int) -> list[Discussion]:
     await _repo_or_404(repo_id)
     return await repository.list_discussions(await get_pool(), repo_id)
+
+
+@router.get("/skills")
+async def list_skills(repo_id: int) -> list[SkillSummary]:
+    repo = await _repo_or_404(repo_id)
+    return [
+        SkillSummary(name=skill.name, description=skill.description)
+        for skill in discussion_agent.discover_skills(repo.path)
+    ]
 
 
 @router.get("/{discussion_id}")
@@ -115,7 +136,10 @@ async def freeze_discussion(repo_id: int, discussion_id: int, data: FreezeIn) ->
     repo = await _repo_or_404(repo_id)
     disc = await _open_discussion_or_error(discussion_id, repo_id)
     detail = await _turn(repo, disc, discussion_agent.FREEZE_PROMPT)
-    content = discussion_agent.strip_fence(detail.messages[-1].content)
+    content = discussion_agent.note_skill(
+        discussion_agent.strip_fence(detail.messages[-1].content),
+        disc.skill_name,
+    )
     _require_freeze_contract(content)
 
     if data.epic_id is not None or data.standalone:
@@ -165,6 +189,15 @@ def _has_allowed_paths(scope: str) -> bool:
                 return True
         return False
     return False
+
+
+def _skill_or_422(
+    repo: Repo, skill_name: str | None
+) -> discussion_agent.SkillDefinition | None:
+    try:
+        return discussion_agent.resolve_skill(repo.path, skill_name)
+    except discussion_agent.SkillUnavailableError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 def _freeze_story(repo: Repo, data: FreezeIn, content: str) -> TicketDetail:

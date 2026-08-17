@@ -4,7 +4,7 @@ import type {
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import {
-  useDiscussion, useDiscussions, useFreezeDiscussion,
+  useDiscussion, useDiscussions, useDiscussionSkills, useFreezeDiscussion,
   useSendDiscussionMessage, useStartDiscussion,
 } from '../../api/hooks'
 import { EpicSelect, STANDALONE } from './EpicSelect'
@@ -53,6 +53,7 @@ export function DiscussionPanel({
   // and a discussion only closes when you freeze it, so shaping a ticket any
   // other way left one open forever. Resuming is now something you choose.
   const { data: discussions } = useDiscussions(repoId)
+  const skills = useDiscussionSkills(repoId)
   const latestOpen = discussions?.find((d) => d.state === 'open') ?? null
   const [startedId, setStartedId] = useState<number | null>(null)
   const [resumedId, setResumedId] = useState<number | null>(null)
@@ -64,6 +65,7 @@ export function DiscussionPanel({
   const freeze = useFreezeDiscussion(repoId)
 
   const [draft, setDraft] = useState('')
+  const [skillName, setSkillName] = useState('')
   const [slug, setSlug] = useState('')
   const [epicId, setEpicId] = useState(epics?.[0]?.epic_id ?? STANDALONE)
   const [klass, setKlass] = useState<CoordinationClass>('feature')
@@ -77,7 +79,10 @@ export function DiscussionPanel({
   const submit = () => {
     if (!draft.trim() || busy) return
     if (discussionId === null) {
-      start.mutate(draft, { onSuccess: (d) => { setStartedId(d.discussion.id); setDraft('') } })
+      start.mutate(
+        { message: draft, ...(skillName ? { skill_name: skillName } : {}) },
+        { onSuccess: (d) => { setStartedId(d.discussion.id); setDraft('') } },
+      )
     } else {
       send.mutate({ id: discussionId, message: draft }, { onSuccess: () => setDraft('') })
     }
@@ -100,7 +105,7 @@ export function DiscussionPanel({
     }
   }
 
-  const error = start.error ?? send.error ?? freeze.error
+  const error = skills.error ?? start.error ?? send.error ?? freeze.error
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
@@ -110,6 +115,25 @@ export function DiscussionPanel({
         </h3>
         <button type="button" onClick={onClose} className="text-sm text-slate-400">close</button>
       </div>
+
+      {discussionId === null ? (
+        <label className="block space-y-1 text-sm text-slate-600">
+          <span>Shaping method</span>
+          <select value={skillName} onChange={(e) => setSkillName(e.target.value)}
+            className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="">Plain conversation</option>
+            {skills.data?.map((skill) => (
+              <option key={skill.name} value={skill.name}>
+                {skill.name} — {skill.description}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : detail?.discussion.skill_name ? (
+        <p className="text-xs text-slate-400">
+          Shaping with {detail.discussion.skill_name}
+        </p>
+      ) : null}
 
       <div aria-busy={sending} className="space-y-3">
         {detail?.messages.map((m) => <Message key={m.id} m={m} />)}

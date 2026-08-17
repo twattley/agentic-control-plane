@@ -7,6 +7,12 @@ SLUG_PATTERN = r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$"  # filename stem, never a path
 
 class DiscussionStartIn(BaseModel):
     message: str = Field(min_length=1)
+    skill_name: str | None = None
+
+
+class SkillSummary(BaseModel):
+    name: str
+    description: str
 
 
 class MessageIn(BaseModel):
@@ -30,6 +36,7 @@ class Discussion(BaseModel):
     session_id: str | None
     state: str          # open | frozen
     ticket_slug: str | None
+    skill_name: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -2,12 +2,15 @@ import asyncpg
 
 from app.features.discussions.models import Discussion, DiscussionMessage
 
-_COLS = "id, repo_id, session_id, state, ticket_slug, created_at, updated_at"
+_COLS = "id, repo_id, session_id, state, ticket_slug, skill_name, created_at, updated_at"
 
 
-async def create_discussion(pool: asyncpg.Pool, repo_id: int) -> Discussion:
+async def create_discussion(
+    pool: asyncpg.Pool, repo_id: int, skill_name: str | None = None
+) -> Discussion:
     row = await pool.fetchrow(
-        f"INSERT INTO discussions (repo_id) VALUES ($1) RETURNING {_COLS}", repo_id
+        f"INSERT INTO discussions (repo_id, skill_name) VALUES ($1, $2) RETURNING {_COLS}",
+        repo_id, skill_name,
     )
     return Discussion(**dict(row))
 

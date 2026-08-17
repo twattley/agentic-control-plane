@@ -8,6 +8,7 @@ import type {
   DecisionInput,
   Discussion,
   DiscussionDetail,
+  DiscussionStartInput,
   EventInput,
   QueueName,
   Repo,
@@ -16,6 +17,7 @@ import type {
   RunDetail,
   RunInput,
   StoryCreateInput,
+  ShapingSkill,
   Ticket,
   TicketCreateInput,
   TicketDetail,
@@ -116,6 +118,13 @@ export function useDiscussions(repoId: number) {
   })
 }
 
+export function useDiscussionSkills(repoId: number) {
+  return useQuery({
+    queryKey: ['discussion-skills', repoId],
+    queryFn: () => apiFetch<ShapingSkill[]>(`/repos/${repoId}/discussions/skills`),
+  })
+}
+
 export function useDiscussion(repoId: number, id: number | null) {
   return useQuery({
     queryKey: ['discussion', repoId, id],
@@ -131,8 +140,8 @@ function cacheDiscussion(repoId: number, detail: DiscussionDetail) {
 
 export function useStartDiscussion(repoId: number) {
   return useMutation({
-    mutationFn: (message: string) =>
-      apiPost<DiscussionDetail>(`/repos/${repoId}/discussions`, { message }),
+    mutationFn: (body: DiscussionStartInput) =>
+      apiPost<DiscussionDetail>(`/repos/${repoId}/discussions`, body),
     onSuccess: (d) => cacheDiscussion(repoId, d),
   })
 }
