@@ -125,6 +125,49 @@ def _git_head(repo_path: str) -> str:
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
+def _checkout_mark(repo_path: str) -> str:
+    """Opaque identity for committed and uncommitted checkout state."""
+    head = _git_head(repo_path)
+    if not head:
+        return ""
+    _stage_all(repo_path)
+    # An informational mark must never abort the pass it only annotates, so
+    # this stays check=False like the module's other git seams: a failed
+    # write-tree yields an empty mark, and the comparison simply says nothing.
+    out = subprocess.run(
+        ["git", "-C", repo_path, "write-tree"],
+        cwd=repo_path, capture_output=True, text=True, check=False,
+    )
+    if out.returncode != 0:
+        return ""
+    return json.dumps({"head": head, "tree": out.stdout.strip()}, sort_keys=True)
+
+
+async def _record_external_edits(pool, run_id: int, events, repo_path: str) -> None:
+    """Say when this pass inherited a checkout the prior pass did not leave."""
+    prior = next(
+        (event.payload.get("checkout_mark") for event in reversed(events)
+         if event.payload.get("checkout_mark")),
+        None,
+    )
+    current = _checkout_mark(repo_path)
+    if prior is None or not current or current == prior:
+        return
+    await runs_service.record_event(
+        pool, run_id,
+        EventIn(
+            type="external_edits_detected",
+            actor="system",
+            payload={
+                "head_before": prior,
+                "head_after": current,
+                "summary": "checkout changed between passes outside this run — "
+                           "the coming diff includes work no agent of this run did",
+            },
+        ),
+    )
+
+
 def _git_diff(repo_path: str) -> str:
     """Stage everything the agent touched and return the unified diff."""
     _stage_all(repo_path)
@@ -246,6 +289,7 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
 
 async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) -> str:
     """Execute a pass after its lease is held; failures are guarded by caller."""
+    await _record_external_edits(pool, run_id, detail.events, repo.path)
     revision_base = None
     head_before = ""
     if role == "builder":
@@ -293,7 +337,8 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
             pool, run_id,
             EventIn(type="builder_brief_posted", actor="builder",
                     payload={"summary": summary, "headline": _headline(summary),
-                             "provider": provider}),
+                             "provider": provider,
+                             "checkout_mark": _checkout_mark(repo.path)}),
         )
     else:
         verdict = _parse_verdict(result.stdout or "", provider)
@@ -306,6 +351,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
             "escalated": outcome.escalated,
             "summary": summary,
             "provider": provider,
+            "checkout_mark": _checkout_mark(repo.path),
         }
         if outcome.verdict == "pass" or outcome.escalated:
             revision_diff = next(

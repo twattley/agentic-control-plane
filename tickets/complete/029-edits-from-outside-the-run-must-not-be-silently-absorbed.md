@@ -14,15 +14,14 @@ witness.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped from the two-lanes conversation as the reverse
-  guard to acp-022; same event pattern, opposite direction.
-- Next: builder claims — but not while `apps/api/app/worker.py` is held
-  (shares the file with 027).
+- State: complete
+- Phase: done
+- Started: 2026-08-17 12:04:43 BST
+- Updated: 2026-08-17 12:25
+- Completed: 2026-08-17 12:25
+- Last: close-ticket verified reviewer run 53b334711d7475fc and close gate passed (non-independent review accepted by human)
+  verdict pass.
+- Next: closed
 
 ## Why
 
