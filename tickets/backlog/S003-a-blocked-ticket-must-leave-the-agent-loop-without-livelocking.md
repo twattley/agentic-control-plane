@@ -20,27 +20,30 @@
 ## Story
 
 When a ticket is genuinely blocked by an unmet dependency, the build⇄review
-loop has no agent-driven way out, so it livelocks. The builder posts a
-"blocked, nothing to do" brief (which still advances to `awaiting_review`); the
-reviewer agrees it is blocked but its findings still route back to `needs_work`;
-the builder is re-dispatched; repeat. The run ping-pongs indefinitely, burning a
-full Sonnet build + Opus review on every lap, until a human notices and blocks
-it by hand.
+loop has no *early* agent-driven way out, so it grinds through the full
+strike budget before the existing escalate-to-human backstop fires. The builder
+posts a "blocked, nothing to do" brief (which still advances to
+`awaiting_review`); the reviewer agrees it is blocked but its findings still
+route back to `needs_work`; the builder is re-dispatched; repeat — a full Sonnet
+build + Opus review burned on every lap until the backstop lands the run in
+`awaiting_human`.
 
 Observed on `football-api-project` run 6, ticket `E001-S06` (depends on
 `E001-S05`, which is unbuilt in `backlog/`):
 
-- ~5 builder→reviewer cycles across ~17 minutes (15:45 → 16:02), no progress.
-- Builder moved the ticket to `blocked/` and stated plainly: *"the story can't
-  be claimed in `blocked` state, so I'm summarizing directly."*
-- Reviewer stated plainly: *"a human decision is needed before this can
-  reopen."*
-- Yet the state machine kept re-dispatching both roles, because an agent that
-  says "blocked" still emits a normal brief/findings event.
+- ~5 builder→reviewer cycles across ~20 minutes (15:45 → 16:05), no progress,
+  then the backstop escalated it to `awaiting_human`.
+- Builder moved the ticket to `blocked/` on the *first* pass and stated plainly:
+  *"the story can't be claimed in `blocked` state, so I'm summarizing directly."*
+- Reviewer stated plainly on the *first* review: *"a human decision is needed
+  before this can reopen."*
+- Yet the state machine re-dispatched both roles four more times, because an
+  agent that says "blocked" still emits a normal brief/findings event.
 
-The only route to `blocked` today is a human `block` decision (or a strike-out
-that assumes a *failed* pass). Two agents agreeing "this is blocked" is neither,
-so nothing terminates the loop.
+The backstop works but is far too slow: the signal ("both agents say blocked")
+is present on the very first cycle. The only *fast* route to a stop today is a
+human `block` decision. The loop should short-circuit to `blocked`/human the
+moment a pass declares the ticket blocked, not ten agent passes later.
 
 ## Scenarios
 
@@ -57,12 +60,12 @@ Given a builder pass that declared the ticket blocked
 When the reviewer confirms it is blocked
 Then the run routes to the human decision, not to `needs_work`.
 
-### Scenario: Strike-out backstop (should not happen)
+### Scenario: Short-circuit on the first blocked declaration (should not happen)
 
-Given repeated passes that produce no forward progress
-When a small consecutive-no-progress threshold is crossed
-Then the run escalates to `awaiting_human`
-And the run must NOT re-dispatch builder/reviewer indefinitely on a ticket both agents agree is blocked.
+Given a builder pass that declares blocked and a reviewer that confirms it
+When the run is evaluated after that first cycle
+Then it stops at `blocked`/`awaiting_human` immediately
+And the run must NOT burn further builder/reviewer cycles waiting for the slow strike-out backstop to fire.
 
 ## Scope
 
@@ -94,6 +97,6 @@ plus a strike-out test that N no-progress laps escalate to `awaiting_human`.
 
 - [ ] A builder pass that declares "cannot proceed / blocked" moves the run to a non-dispatching state instead of `awaiting_review`.
 - [ ] A reviewer confirming blocked routes to the human, not back to `needs_work`.
-- [ ] A consecutive-no-progress strike-out escalates to `awaiting_human` as a backstop.
-- [ ] No run can livelock builder↔reviewer on a ticket both agents agree is blocked.
+- [ ] The existing consecutive-no-progress strike-out remains as a backstop, but no longer the *first* line of defence.
+- [ ] A ticket both agents agree is blocked stops after one cycle, not ~5.
 - [ ] Covered by RED-first tests; `make test` green.
