@@ -9,13 +9,13 @@
 
 ## Status
 
-- State: in-progress
-- Phase: review-loop
+- State: complete
+- Phase: done
 - Started: 2026-08-17 20:14:12 BST
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 20:15:43 BST - compact card layout built; web typecheck and production build green
-- Next: owner visually checks the live workbench at http://localhost:5400
+- Updated: 2026-08-17 20:18
+- Completed: 2026-08-17 20:18
+- Last: owner accepted the direct small-task visual review; web and repository close gates passed
+- Next: closed
 
 ## Story
 
