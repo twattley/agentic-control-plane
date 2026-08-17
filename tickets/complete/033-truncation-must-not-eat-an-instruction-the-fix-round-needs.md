@@ -22,15 +22,16 @@ is the two ways a cut can still eat signal:
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - rescoped against current worker.py: findings budget
-  (7cd5768) and verdict-refusal carry-through (acp-025) already landed;
-  what's left is gate-output direction and marking every cut.
-- Next: builder claims — last in the worker lane; after 027 releases
+- State: complete
+- Phase: done
+- Started: 2026-08-17
+- Updated: 2026-08-17 13:33
+- Completed: 2026-08-17 13:33
+- Last: close-ticket verified reviewer run cb1a20ea13241095 and close gate passed
+  independent review standards-reviewer), verdict pass on round 2; round 1
+  blocking fix: closer refusal clips stdout+stderr so the reason survives
+  tail-keeping. 249 tests, ruff clean.
+- Next: closed
   `apps/api/app/worker.py`, sequence behind 029, 031, and 032, which share
   the file.
 

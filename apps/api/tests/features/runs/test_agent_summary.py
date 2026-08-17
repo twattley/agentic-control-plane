@@ -24,10 +24,12 @@ def test_a_located_findings_list_reaches_the_fix_round_whole():
 
 
 def test_a_builder_brief_stays_headline_sized():
-    """The brief is a board caption, not an instruction. It keeps its budget."""
+    """The brief is a board caption, not an instruction. It keeps its budget —
+    and since acp-033 a cut is marked, never silent."""
     summary = _summary("x" * 900, "codex", "builder")
 
-    assert len(summary) == 500
+    assert len(summary) <= 500 + len(" [… truncated]")
+    assert summary.endswith("[… truncated]")
 
 
 def test_a_silent_agent_still_says_something():
@@ -35,7 +37,9 @@ def test_a_silent_agent_still_says_something():
 
 
 def test_a_reviewer_message_is_still_bounded():
-    assert len(_summary("x" * 20_000, "codex", "reviewer")) == 4000
+    bounded = _summary("x" * 20_000, "codex", "reviewer")
+    assert len(bounded) <= 4000 + len(" [… truncated]")
+    assert bounded.endswith("[… truncated]")
 
 
 def test_claude_json_is_unwrapped_before_the_budget_applies():

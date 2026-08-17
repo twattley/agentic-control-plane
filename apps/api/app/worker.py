@@ -16,6 +16,7 @@ checkout to go live.
 import asyncio
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -430,7 +431,8 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
         if gate.returncode != 0:
             return await _post_gate(
                 pool, run_id, "gate_failed", repo.close_gate_command,
-                (gate.stdout + gate.stderr).strip()[:500] or "gate command failed",
+                _clip(gate.stdout + gate.stderr, _GATE_CHARS, keep_tail=True)
+                or "gate command failed",
             )
 
     return await _commit_and_close(pool, run_id, detail, repo, closed_by=None)
@@ -463,7 +465,15 @@ async def _close_with_repo_closer(
             _process_failure_summary("close_ticket", error),
         )
     if result.returncode != 0:
-        reason = (result.stderr + result.stdout).strip()[:500] or "close_ticket refused"
+        # stdout first: the closer's gate log lands on stdout while its
+        # refusal reason is a SystemExit on stderr — tail-keeping must leave
+        # the reason as the surviving end. A >2k stderr would push the gate
+        # log out instead; closer stderr is normally one line, so that is the
+        # right side of the trade.
+        reason = (
+            _clip(result.stdout + result.stderr, _GATE_CHARS, keep_tail=True)
+            or "close_ticket refused"
+        )
         return await _post_gate(
             pool,
             run_id,
@@ -557,11 +567,41 @@ _BRIEF_CHARS = 500
 #: first and leave the builder re-diagnosing the diff.
 _FINDINGS_CHARS = 4000
 
+#: A failed gate's actionable signal is the TAIL of its output: pytest's short
+#: summary and a closer's refusal both live at the end, while the head is a
+#: platform banner. Since acp-016 this summary is the fix round's instruction.
+#: Sized to hold pytest's short-summary block.
+_GATE_CHARS = 2000
+
+_CUT_HEAD = "[truncated …] "
+_CUT_TAIL = " [… truncated]"
+
+
+def _clip(text: str, budget: int, *, keep_tail: bool = False) -> str:
+    """Bound text visibly (acp-033): land the cut on whitespace and mark the
+    missing end, so a reader — human or agent — never mistakes a fragment for
+    the whole instruction. The bound's only job is stopping a rambling agent
+    from stuffing megabytes into an event payload."""
+    text = text.strip()
+    if len(text) <= budget:
+        return text
+    if keep_tail:
+        kept = text[-budget:]
+        boundary = re.search(r"\s", kept)  # gate output breaks on newlines
+        if boundary is not None:
+            kept = kept[boundary.end():]
+        return _CUT_HEAD + kept
+    kept = text[:budget]
+    boundary = re.search(r"\s\S*$", kept)  # drop the trailing partial word
+    if boundary is not None:
+        kept = kept[:boundary.start()]
+    return kept + _CUT_TAIL
+
 
 def _summary(stdout: str, provider: str, role: str) -> str:
     """The agent's final message, trimmed to what its reader actually needs."""
     budget = _FINDINGS_CHARS if role == "reviewer" else _BRIEF_CHARS
-    message = _agent_message(stdout, provider).strip()[:budget]
+    message = _clip(_agent_message(stdout, provider), budget)
     return message or f"{provider} {role} pass complete"
 
 

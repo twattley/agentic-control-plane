@@ -21,7 +21,7 @@ from tests.features.runs.test_dispatch import (
 
 
 def _install_closer(
-    repo_dir, exit_code: int = 0, stderr: str = "", delay_s: float = 0
+    repo_dir, exit_code: int = 0, stderr: str = "", stdout: str = "", delay_s: float = 0
 ) -> None:
     """A fake close_ticket that records its argv and exits as told. The real
     one is pinned by the portable-close conformance suite; this one isolates
@@ -33,6 +33,7 @@ def _install_closer(
         "#!/bin/sh\n"
         'printf "%s\\n" "$*" >> closer_args.log\n'
         + (f"sleep {delay_s}\n" if delay_s else "")
+        + (f'printf "%s\\n" "{stdout}"\n' if stdout else "")
         + (f'printf "%s\\n" "{stderr}" >&2\n' if stderr else "")
         + f"exit {exit_code}\n"
     )
