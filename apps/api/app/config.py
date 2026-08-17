@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     claude_permission_mode: str = "acceptEdits"
     # Max "changes" verdicts before the reviewer escalates to the human instead
     # of bouncing the run back to the builder — bounds build<->review spend.
-    max_review_rounds: int = 2
+    # Three rather than two: on the first laps the third round was repeatedly
+    # where a fix's own regression got caught, and escalating before that put
+    # work in front of a human that the pair would have settled themselves.
+    max_review_rounds: int = 3
     # Shell command the closer runs as the gate before committing (must exit 0).
     # Default is a no-op; set to the repo's test command to gate on green tests.
     close_gate_command: str = "true"

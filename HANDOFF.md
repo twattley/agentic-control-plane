@@ -1,33 +1,42 @@
-# Handoff — 2026-08-16
+# Handoff — 2026-08-17
 
 First full day of dogfooding the control plane on real tickets. Two laps ran
 end to end (racing-platform S001, transcriber E001-S00). Everything is
 committed and pushed except where noted.
 
-## Start here tomorrow
+## Done since the last handoff
 
-**Build `acp-017` first.** It is small, well-specified, and everything else is
-misleading until it lands.
+**`acp-017` is closed** (`c56b2fd`). `_capped_verdict` is gone; verdict and
+escalation are separate facts. `reviewer_findings_posted` carries the reviewer's
+real verdict plus `escalated`, the state machine routes on the flag, and the run
+view shows "✋ changes · rounds spent, over to you" instead of a green pass. The
+plane can no longer show a rejection as an approval.
 
-```
-tickets/ready/017-an-escalated-rejection-must-not-be-recorded-as-a-pass.md
-```
+Two notes from doing it. The ticket had `state_machine.py` in `forbidden_paths`,
+which made it impossible — `event_transition` is the only thing that reads the
+verdict — so the scope was widened deliberately and recorded. And escalated
+rejections now *count* as change rounds, where recording them as passes had
+hidden them; a run that has already escalated returns to the human on the next
+rejection rather than looping. Pinned by a test.
 
-`worker.py:247` `_capped_verdict` rewrites a reviewer's `changes` to `pass`
-once `max_review_rounds` is hit. The escalation routing is correct; the rewrite
-is not. On transcriber run 3 the reviewer's last word was `VERDICT: changes`,
-the plane recorded `pass`, the human approved what they were shown, and the
-closer committed `5b316a2`. The portable `close_ticket`, reading the honest
-ledger, still refuses to close that ticket.
+`max_review_rounds` is now **3**, not 2. On the first laps the third round was
+repeatedly where a fix's own regression got caught.
 
-So the plane can commit work its reviewer rejected. That is the bug to fix
-before trusting another lap.
+## Start here
+
+**`acp-015` — the close gate belongs to the repo.** It is the last thing making
+every lap unsafe: one global command, correct for whichever repo is mid-lap and
+wrong for the rest, currently `uv run pytest` for transcriber. Until it lands,
+every lap needs a manual `.env` edit and an API restart, and forgetting means an
+ungated close.
+
+Then `acp-014` and `acp-016`, which close the two-closers seam together.
 
 ## Repo state
 
 | Repo | Branch | State |
 | --- | --- | --- |
-| agentic-control-plane | main | clean, pushed. 139 pytest, tsc + build clean |
+| agentic-control-plane | main | clean, pushed. 145 pytest, ruff, tsc + build clean |
 | agentic-engineering | main | clean, pushed. 163 unittest |
 | transcriber | main | **2 commits unpushed**, tree clean, 40 pytest |
 | racing-platform | main | clean, pushed |
@@ -59,11 +68,10 @@ this morning.
 | acp-014 | a plane-authored ticket must close with the portable closer |
 | acp-015 | the close gate belongs to the repo, not the service |
 | acp-016 | closing in the plane runs the repo's own closer |
-| acp-017 | **an escalated rejection must not be recorded as a pass** |
 | acp-011 | choose a skill when shaping a ticket (pre-existing) |
 
-Sensible order: **017 → 015 → 014 → 016**. 017 makes verdicts honest, 015 makes
-gates real per repo, then 014 and 016 close the two-closers seam.
+Sensible order: **015 → 014 → 016**. 015 makes gates real per repo, then 014
+and 016 close the two-closers seam. acp-017 is done.
 
 ## Known traps
 
