@@ -284,10 +284,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
         )
     else:
         verdict = _parse_verdict(result.stdout or "", provider)
-        prior_changes = sum(
-            1 for e in detail.events
-            if e.type == "reviewer_findings_posted" and e.payload.get("verdict") == "changes"
-        )
+        prior_changes = _changes_since_last_human_word(detail.events)
         outcome = _review_outcome(verdict, prior_changes, settings.max_review_rounds)
         if outcome.escalated:
             summary = f"[escalated to human after {prior_changes} change rounds] {summary}"
@@ -479,6 +476,25 @@ def _parse_verdict(stdout: str, provider: str) -> str:
 class _ReviewOutcome(NamedTuple):
     verdict: str
     escalated: bool
+
+
+_HUMAN_WORD_EVENTS = frozenset({
+    "human_note_posted", "human_approved", "blocked", "close_requested",
+})
+
+
+def _changes_since_last_human_word(events) -> int:
+    """Count rejected reviews in the current human-directed agent loop."""
+    changes = 0
+    for event in reversed(events):
+        if event.type in _HUMAN_WORD_EVENTS:
+            break
+        if (
+            event.type == "reviewer_findings_posted"
+            and event.payload.get("verdict") == "changes"
+        ):
+            changes += 1
+    return changes
 
 
 def _review_outcome(verdict: str, prior_changes: int, cap: int) -> _ReviewOutcome:

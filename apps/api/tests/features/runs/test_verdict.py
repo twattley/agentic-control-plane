@@ -1,7 +1,10 @@
 import json
+from types import SimpleNamespace
+
+import pytest
 
 from app.services.state_machine import event_transition
-from app.worker import _parse_verdict, _review_outcome
+from app.worker import _changes_since_last_human_word, _parse_verdict, _review_outcome
 
 
 def test_parse_plain_pass():
@@ -56,6 +59,59 @@ def test_an_escalated_rejection_counts_as_a_change_round():
 
     next_round = _review_outcome("changes", prior_changes=3, cap=2)
     assert next_round.escalated is True
+
+
+def test_a_human_note_resets_the_round_cap_after_an_escalation():
+    """Run 4's shape: exhaust one disagreement, then let the human start a
+    fresh instruction without immediately escalating its first rejection."""
+    history = [
+        SimpleNamespace(
+            type="reviewer_findings_posted",
+            actor="reviewer",
+            payload={"verdict": "changes", "escalated": index == 3},
+        )
+        for index in range(4)
+    ]
+    history.append(SimpleNamespace(
+        type="human_note_posted", actor="human", payload={"note": "new work"}
+    ))
+
+    prior_changes = _changes_since_last_human_word(history)
+    outcome = _review_outcome("changes", prior_changes, cap=3)
+
+    assert prior_changes == 0
+    assert outcome.escalated is False
+
+
+def test_the_round_cap_still_holds_without_a_new_human_word():
+    history = [
+        SimpleNamespace(
+            type="reviewer_findings_posted",
+            actor="reviewer",
+            payload={"verdict": "changes", "escalated": index == 3},
+        )
+        for index in range(4)
+    ]
+
+    prior_changes = _changes_since_last_human_word(history)
+    outcome = _review_outcome("changes", prior_changes, cap=3)
+
+    assert prior_changes == 4
+    assert outcome.escalated is True
+
+
+@pytest.mark.parametrize("decision_event", ["human_approved", "close_requested", "blocked"])
+def test_a_human_decision_also_starts_a_fresh_round_budget(decision_event):
+    history = [
+        SimpleNamespace(
+            type="reviewer_findings_posted",
+            actor="reviewer",
+            payload={"verdict": "changes", "escalated": True},
+        ),
+        SimpleNamespace(type=decision_event, actor="human", payload={}),
+    ]
+
+    assert _changes_since_last_human_word(history) == 0
 
 
 def test_an_escalated_rejection_still_routes_to_the_human():

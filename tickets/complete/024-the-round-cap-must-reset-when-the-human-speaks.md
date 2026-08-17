@@ -16,15 +16,13 @@ never got a second round on any of them.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped from run 4's tail, where each human note bought
-  exactly one builder round before the next verdict escalated regardless of
-  content.
-- Next: builder claims
+- State: complete
+- Phase: done
+- Started: 2026-08-17 10:59:46 BST
+- Updated: 2026-08-17 11:06
+- Completed: 2026-08-17 11:06
+- Last: close-ticket verified reviewer run 538f6431db31481f and close gate passed
+- Next: closed
 
 ## Why
 
@@ -69,8 +67,8 @@ uv run --project apps/api pytest apps/api/tests/
 
 ## Done When
 
-- [ ] After a human note, the pair gets the full cap again before the next
+- [x] After a human note, the pair gets the full cap again before the next
       escalation, pinned by a test replaying run 4's shape (3 rounds →
       escalate → human note → changes-verdict does **not** escalate).
-- [ ] A run that hits the cap with no human word since its last cap still
+- [x] A run that hits the cap with no human word since its last cap still
       escalates exactly as today.
