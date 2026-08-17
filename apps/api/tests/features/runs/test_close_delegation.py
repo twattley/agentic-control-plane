@@ -9,6 +9,7 @@ keeps the plane's inline gate-and-commit behaviour (pinned by test_dispatch)."""
 import subprocess
 
 from app.worker import run_pass
+from tests.conftest import AUTH
 from tests.features.runs.test_dispatch import (
     _drive_to_closing,
     _gate_event,
@@ -86,6 +87,46 @@ async def test_closer_refusal_surfaces_and_leaves_the_run_unclosed(db, client, t
         ["git", "-C", str(repo_dir), "log", "--oneline"], capture_output=True, text=True
     )
     assert "t1" not in log.stdout  # nothing committed on refusal
+
+
+async def test_non_pass_review_tags_the_closer_refusal_as_a_verdict_failure(
+    db, client, tmp_path
+):
+    repo_dir = tmp_path / "repo"
+    _git_repo(repo_dir)
+    _install_closer(
+        repo_dir, exit_code=1,
+        stderr="Reviewer verdict is needs-work; close requires pass.",
+    )
+    run_id = await _run_on(client, repo_dir, gate="uv run pytest")
+
+    async def post(path, body):
+        await client.post(
+            f"/api/v1/runs/{run_id}{path}", json=body, headers=AUTH
+        )
+
+    await post("/claim", {"role": "builder", "holder": "codex"})
+    await post("/events", {"type": "builder_brief_posted", "actor": "builder"})
+    await post("/claim", {"role": "reviewer", "holder": "claude"})
+    await post(
+        "/events",
+        {
+            "type": "reviewer_findings_posted",
+            "actor": "reviewer",
+            "payload": {
+                "verdict": "changes",
+                "escalated": True,
+                "summary": "worker.py:533 — preserve the located fix.",
+            },
+        },
+    )
+    await post("/decision", {"decision": "approve"})
+    await post("/decision", {"decision": "close"})
+
+    assert await run_pass(db, run_id, "closer", "system") == "done"
+
+    event = await _gate_event(client, run_id)
+    assert event["payload"]["failure_kind"] == "review_verdict"
 
 
 async def test_ungated_repo_still_delegates_and_says_ungated(db, client, tmp_path):

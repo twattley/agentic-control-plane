@@ -395,6 +395,36 @@ def test_fix_pass_carries_the_close_failure_when_it_is_the_newest_word(tmp_path)
     assert "No blocking findings." not in task
 
 
+def test_verdict_refusal_carries_the_findings_that_prevented_close(tmp_path):
+    """Run 4's shape: an escalated rejection reached the human, who approved
+    and attempted close. The refusal is context; the review is the work."""
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted",
+        payload={
+            "verdict": "changes",
+            "escalated": True,
+            "summary": "apps/api/app/worker.py:533 — preserve the located fix.",
+        },
+    )
+    approved = SimpleNamespace(type="human_approved", payload={})
+    close = SimpleNamespace(type="close_requested", payload={})
+    gate = SimpleNamespace(
+        type="gate_failed",
+        payload={
+            "failure_kind": "review_verdict",
+            "summary": "Reviewer verdict is needs-work; close requires pass.",
+            "gate_command": "uv run pytest",
+        },
+    )
+
+    task = _task_for(
+        _detail(events=[findings, approved, close, gate]), "builder", str(tmp_path)
+    )
+
+    assert "Reviewer verdict is needs-work; close requires pass." in task
+    assert "apps/api/app/worker.py:533 — preserve the located fix." in task
+
+
 def test_builder_task_states_the_role_boundary(tmp_path):
     task = _task_for(_detail(), "builder", str(tmp_path))
 

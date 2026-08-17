@@ -380,7 +380,14 @@ async def _close_with_repo_closer(
     )
     if result.returncode != 0:
         reason = (result.stderr + result.stdout).strip()[:500] or "close_ticket refused"
-        return await _post_gate(pool, run_id, "gate_failed", repo.close_gate_command, reason)
+        return await _post_gate(
+            pool,
+            run_id,
+            "gate_failed",
+            repo.close_gate_command,
+            reason,
+            failure_kind=_close_refusal_kind(detail.events),
+        )
     return await _commit_and_close(pool, run_id, detail, repo, closed_by=closer.name)
 
 
@@ -407,17 +414,42 @@ async def _commit_and_close(
 
 
 async def _post_gate(
-    pool: asyncpg.Pool, run_id: int, event_type: str, gate_command: str | None, summary: str
+    pool: asyncpg.Pool,
+    run_id: int,
+    event_type: str,
+    gate_command: str | None,
+    summary: str,
+    failure_kind: str | None = None,
 ) -> str:
+    payload = {"gate_command": gate_command, "summary": summary}
+    if failure_kind:
+        payload["failure_kind"] = failure_kind
     try:
         await runs_service.record_event(
             pool, run_id,
             EventIn(type=event_type, actor="system",
-                    payload={"gate_command": gate_command, "summary": summary}),
+                    payload=payload),
         )
     except IllegalTransitionError:
         return "skipped"  # another closer already moved it
     return "done"
+
+
+def _close_refusal_kind(events) -> str | None:
+    """Name a verdict refusal from structured review history.
+
+    The portable closer checks the review before it runs the code gate. A
+    non-pass latest review therefore identifies the actionable refusal without
+    coupling the worker to the closer's human-readable error wording.
+    """
+    review = next(
+        (event for event in reversed(events)
+         if event.type == "reviewer_findings_posted"),
+        None,
+    )
+    if review is not None and review.payload.get("verdict") != "pass":
+        return "review_verdict"
+    return None
 
 
 def _agent_message(stdout: str, provider: str) -> str:
@@ -536,13 +568,29 @@ def _newest_instruction(events) -> _Instruction | None:
     An empty note is not a word: preferring it would replace real findings with
     nothing, which is worse than never having asked.
     """
-    for event in reversed(events):
+    for index in range(len(events) - 1, -1, -1):
+        event = events[index]
         entry = _INSTRUCTION_SOURCES.get(event.type)
         if entry is None:
             continue
         key, source, label = entry
         text = (event.payload or {}).get(key)
         if text and text.strip():
+            if (
+                event.type == "gate_failed"
+                and event.payload.get("failure_kind") == "review_verdict"
+            ):
+                findings = next(
+                    (
+                        prior.payload.get("summary", "").strip()
+                        for prior in reversed(events[:index])
+                        if prior.type == "reviewer_findings_posted"
+                        and prior.payload.get("summary", "").strip()
+                    ),
+                    None,
+                )
+                if findings:
+                    text = f"{text.strip()} Reviewer findings: {findings}"
             return _Instruction(source, label, text.strip())
     return None
 

@@ -16,14 +16,13 @@ behaviour of the night.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped from run 4's refused close at 09:37, whose
-  boilerplate instruction directly preceded the rogue self-close at 09:41.
-- Next: builder claims
+- State: complete
+- Phase: done
+- Started: 2026-08-17 11:08:11 BST
+- Updated: 2026-08-17 11:17
+- Completed: 2026-08-17 11:17
+- Last: close-ticket verified reviewer run 68a1e34d25a2b1bd and close gate passed
+- Next: closed
 
 ## Why
 
@@ -71,10 +70,10 @@ uv run --project apps/api pytest apps/api/tests/
 
 ## Done When
 
-- [ ] A close refused for a non-pass verdict produces a next-round builder
+- [x] A close refused for a non-pass verdict produces a next-round builder
       task containing the reviewer's actual findings text, pinned by a test
       replaying run 4's event shape.
-- [ ] A close refused for a red gate still delivers the gate output as the
+- [x] A close refused for a red gate still delivers the gate output as the
       instruction, unchanged.
-- [ ] Related but separate: `019` (truncation) still owns instruction size;
+- [x] Related but separate: `019` (truncation) still owns instruction size;
       this ticket owns instruction source.
