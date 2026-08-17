@@ -42,3 +42,4 @@ the draft or corrupting the discussion.
 
 - `E002-S00`
 - `E002-S01`
+- `E002-S02`
