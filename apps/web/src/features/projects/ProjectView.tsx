@@ -98,7 +98,7 @@ function TicketEditor({
 }
 
 // The agents on offer, as "provider[:model]" specs the worker expands into CLI
-// flags. Defaults: Sonnet builds, Codex reviews.
+// flags. Defaults: Sonnet builds, Opus reviews.
 const AGENTS: { value: ProviderSpec; label: string }[] = [
   { value: 'claude:sonnet', label: 'Claude Sonnet' },
   { value: 'claude:opus', label: 'Claude Opus' },
@@ -106,7 +106,7 @@ const AGENTS: { value: ProviderSpec; label: string }[] = [
   { value: 'stub', label: 'Stub (no-op)' },
 ]
 const DEFAULT_BUILDER: ProviderSpec = 'claude:sonnet'
-const DEFAULT_REVIEWER: ProviderSpec = 'codex'
+const DEFAULT_REVIEWER: ProviderSpec = 'claude:opus'
 
 function AgentPicker({
   builder, reviewer, onBuilder, onReviewer,

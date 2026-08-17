@@ -1,6 +1,8 @@
 """Ticket-shaping discussions: bounce with a repo-grounded agent, then freeze
 into a ticket file. The agent is faked — no test ever spawns a real CLI."""
 
+import asyncio
+
 import pytest
 
 from app.services import discussion_agent
@@ -321,7 +323,9 @@ async def test_frozen_discussion_refuses_more_messages(db, client, tmp_path, age
     assert resp.status_code == 409
 
 
-async def test_agent_failure_records_nothing(db, client, tmp_path, monkeypatch):
+async def test_first_agent_failure_leaves_no_empty_discussion(
+    db, client, tmp_path, monkeypatch
+):
     async def broken(repo_path, message, session_id):
         raise discussion_agent.AgentError("boom")
 
@@ -334,11 +338,51 @@ async def test_agent_failure_records_nothing(db, client, tmp_path, monkeypatch):
 
     assert resp.status_code == 502
     discs = (await client.get(f"/api/v1/repos/{repo_id}/discussions", headers=AUTH)).json()
-    assert discs[0]["session_id"] is None  # row exists but no messages recorded
-    detail = (await client.get(
-        f"/api/v1/repos/{repo_id}/discussions/{discs[0]['id']}", headers=AUTH
-    )).json()
-    assert detail["messages"] == []
+    assert discs == []
+
+    resumed_sessions = []
+
+    async def recovered(repo_path, message, session_id, skill_prompt=None):
+        resumed_sessions.append(session_id)
+        return "fresh-session", "ready"
+
+    monkeypatch.setattr(discussion_agent, "reply", recovered)
+    retry = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions", json={"message": "hi"}, headers=AUTH
+    )
+
+    assert retry.status_code == 201
+    assert resumed_sessions == [None]
+
+
+async def test_later_agent_failure_preserves_history_and_session(
+    db, client, tmp_path, agent_calls, monkeypatch
+):
+    repo_id = await _repo(client, tmp_path)
+    started = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions",
+        json={"message": "hi"}, headers=AUTH,
+    )
+    disc_id = started.json()["discussion"]["id"]
+    before = started.json()
+
+    async def broken(repo_path, message, session_id, skill_prompt=None):
+        assert session_id == "sess-1"
+        raise discussion_agent.AgentError("codex unavailable")
+
+    monkeypatch.setattr(discussion_agent, "reply", broken)
+    response = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions/{disc_id}/messages",
+        json={"message": "try again"}, headers=AUTH,
+    )
+    after = await client.get(
+        f"/api/v1/repos/{repo_id}/discussions/{disc_id}", headers=AUTH
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "codex unavailable"
+    assert after.json()["discussion"]["session_id"] == "sess-1"
+    assert after.json()["messages"] == before["messages"]
 
 
 async def test_discussions_require_token(db, client, tmp_path):
@@ -361,9 +405,16 @@ def test_shaping_prompts_pin_sizing_depth_and_ticket_contract():
     assert "forbidden_paths" in discussion_agent.FREEZE_PROMPT
 
 
-@pytest.mark.parametrize("skill_prompt", [None, "Ask one contract question."])
-async def test_shaping_agent_subprocess_remains_read_only(
-    monkeypatch, tmp_path, skill_prompt
+@pytest.mark.parametrize(
+    ("session_id", "expected_resume"),
+    [
+        (None, []),
+        ("codex:thread-1", ["resume", "thread-1"]),
+    ],
+    ids=["start", "resume"],
+)
+async def test_shaping_agent_uses_explicit_read_only_codex_profile(
+    monkeypatch, tmp_path, session_id, expected_resume
 ):
     calls = []
 
@@ -371,7 +422,14 @@ async def test_shaping_agent_subprocess_remains_read_only(
         returncode = 0
 
         async def communicate(self):
-            return b'{"session_id":"sess-2","result":"ready"}', b""
+            return (
+                b'{"type":"thread.started","thread_id":"thread-1"}\n'
+                b'{"type":"turn.started"}\n'
+                b'{"type":"item.completed","item":{"type":"agent_message",'
+                b'"text":"ready"}}\n'
+                b'{"type":"turn.completed"}\n',
+                b"",
+            )
 
     async def fake_subprocess(*cmd, **kwargs):
         calls.append((cmd, kwargs))
@@ -379,14 +437,146 @@ async def test_shaping_agent_subprocess_remains_read_only(
 
     monkeypatch.setattr(discussion_agent.asyncio, "create_subprocess_exec", fake_subprocess)
 
-    result = await discussion_agent.reply(
-        str(tmp_path), "shape this", None, skill_prompt
+    result = await discussion_agent.reply(str(tmp_path), "shape this", session_id)
+
+    assert result == ("codex:thread-1", "ready")
+    cmd, kwargs = calls[0]
+    common = (
+        "codex", "exec", "-s", "read-only", "-C", str(tmp_path), "--json",
+        "-m", "gpt-5.6-sol",
+        "-c", "model_reasoning_effort=high",
+        "-c", "service_tier=priority",
+    )
+    assert cmd[:len(common)] == common
+    assert list(cmd[len(common):-1]) == expected_resume
+    assert cmd[-1].startswith(discussion_agent._SYSTEM)
+    assert cmd[-1].endswith("shape this")
+    assert kwargs["cwd"] == str(tmp_path)
+
+
+async def test_selected_skill_is_in_codex_prompt(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return (
+                b'{"type":"thread.started","thread_id":"thread-2"}\n'
+                b'{"type":"item.completed","item":{"type":"agent_message",'
+                b'"text":"ready"}}\n',
+                b"",
+            )
+
+    async def fake_subprocess(*cmd, **kwargs):
+        calls.append(cmd)
+        return FakeProcess()
+
+    monkeypatch.setattr(discussion_agent.asyncio, "create_subprocess_exec", fake_subprocess)
+
+    await discussion_agent.reply(
+        str(tmp_path), "shape this", None, "Ask one contract question."
     )
 
-    assert result == ("sess-2", "ready")
-    cmd, kwargs = calls[0]
-    assert "--permission-mode" not in cmd
-    system_prompt = cmd[cmd.index("--append-system-prompt") + 1]
-    assert system_prompt.startswith(discussion_agent._SYSTEM)
-    assert ("Ask one contract question." in system_prompt) == bool(skill_prompt)
-    assert kwargs["cwd"] == str(tmp_path)
+    prompt = calls[0][-1]
+    assert prompt.startswith(discussion_agent._SYSTEM)
+    assert "Ask one contract question." in prompt
+    assert prompt.endswith("shape this")
+
+
+async def test_legacy_claude_session_is_not_sent_to_codex(monkeypatch, tmp_path):
+    async def unexpected_subprocess(*cmd, **kwargs):
+        pytest.fail("a legacy Claude session must not reach codex resume")
+
+    monkeypatch.setattr(
+        discussion_agent.asyncio, "create_subprocess_exec", unexpected_subprocess
+    )
+
+    with pytest.raises(discussion_agent.AgentError, match="legacy shaping session"):
+        await discussion_agent.reply(str(tmp_path), "continue", "old-claude-session")
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        b"not-json\n",
+        b"[]\n",
+        b'{"type":"thread.started","thread_id":"thread-1"}\n',
+        b'{"type":"item.completed","item":{"type":"agent_message","text":""}}\n',
+    ],
+    ids=["malformed", "non-object", "missing-reply", "empty-reply"],
+)
+async def test_invalid_codex_output_is_an_agent_error(monkeypatch, tmp_path, stdout):
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return stdout, b""
+
+    async def fake_subprocess(*cmd, **kwargs):
+        return FakeProcess()
+
+    monkeypatch.setattr(discussion_agent.asyncio, "create_subprocess_exec", fake_subprocess)
+
+    with pytest.raises(discussion_agent.AgentError, match="invalid response"):
+        await discussion_agent.reply(str(tmp_path), "shape this", None)
+
+
+async def test_missing_codex_executable_is_an_agent_error(monkeypatch, tmp_path):
+    async def missing_subprocess(*cmd, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", "codex")
+
+    monkeypatch.setattr(
+        discussion_agent.asyncio, "create_subprocess_exec", missing_subprocess
+    )
+
+    with pytest.raises(discussion_agent.AgentError, match="could not start Codex"):
+        await discussion_agent.reply(str(tmp_path), "shape this", None)
+
+
+async def test_failed_codex_process_reports_bounded_error(monkeypatch, tmp_path):
+    class FakeProcess:
+        returncode = 7
+
+        async def communicate(self):
+            return b"", b"authentication failed" + (b"!" * 500)
+
+    async def fake_subprocess(*cmd, **kwargs):
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        discussion_agent.asyncio, "create_subprocess_exec", fake_subprocess
+    )
+
+    with pytest.raises(discussion_agent.AgentError) as error:
+        await discussion_agent.reply(str(tmp_path), "shape this", None)
+
+    assert str(error.value).startswith("authentication failed")
+    assert len(str(error.value)) == 300
+
+
+async def test_timed_out_codex_process_is_killed(monkeypatch, tmp_path):
+    class FakeProcess:
+        returncode = None
+        killed = False
+
+        async def communicate(self):
+            await asyncio.Future()
+
+        def kill(self):
+            self.killed = True
+
+    process = FakeProcess()
+
+    async def fake_subprocess(*cmd, **kwargs):
+        return process
+
+    monkeypatch.setattr(
+        discussion_agent.asyncio, "create_subprocess_exec", fake_subprocess
+    )
+    monkeypatch.setattr(discussion_agent, "_TIMEOUT_S", 0.001)
+
+    with pytest.raises(discussion_agent.AgentError, match="timed out"):
+        await discussion_agent.reply(str(tmp_path), "shape this", None)
+
+    assert process.killed

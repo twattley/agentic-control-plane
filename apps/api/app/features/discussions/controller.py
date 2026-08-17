@@ -84,7 +84,13 @@ async def start_discussion(repo_id: int, data: DiscussionStartIn) -> DiscussionD
     disc = await repository.create_discussion(
         await get_pool(), repo_id, data.skill_name
     )
-    return await _turn(repo, disc, data.message)
+    try:
+        return await _turn(repo, disc, data.message)
+    except HTTPException:
+        # This row has never completed a turn, so it carries no user history.
+        # Removing it keeps retries fresh and the open-discussion list honest.
+        await repository.delete_discussion(await get_pool(), disc.id)
+        raise
 
 
 @router.get("")

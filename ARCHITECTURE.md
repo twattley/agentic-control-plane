@@ -29,7 +29,7 @@ bounded timeout. Registered checkout paths are therefore a trust boundary.
 | `artifacts` | Attached outputs: `diff`, `test_output`, `screenshot`, `log`, `evidence` |
 | `leases` | Role locks — at most one active (`released_at IS NULL`) lease per run+role |
 | `decisions` | Human decisions: `approve`, `request_changes`, `block`, `close` |
-| `discussions` + `discussion_messages` | Ticket-shaping chats (pre-freeze strands); `session_id` is the claude CLI conversation handle |
+| `discussions` + `discussion_messages` | Ticket-shaping chats (pre-freeze strands); `session_id` is the Codex CLI thread handle |
 
 Everything hangs off `runs` (FK, `ON DELETE CASCADE`). A run's history is
 reconstructable from its events; the `state` column is a materialised cursor.
@@ -89,9 +89,9 @@ renders a ticket and "Start work" creates a run with
 
 **Ticket-writing is an interface with a freeze step**: discuss → freeze →
 build. The discussion happens in the UI ("Shape an idea"): each turn is a
-short-lived `claude -p --resume <session>` run **in the repo checkout** — the
-shaping agent reads real code but is read-only by construction (print mode
-denies write tools). Freeze asks it for the final markdown and the *plane*
+short-lived `codex exec` run, resumed by thread id, **in the repo checkout** —
+the shaping agent reads real code but is read-only by construction (an explicit
+read-only sandbox). Freeze asks it for the final markdown and the *plane*
 writes `tickets/<slug>.md` through the tickets feature, so `tickets/` stays
 the single write surface. Freezing writes a `## Summary` section — two or
 three sentences aimed at future-you re-entering cold (test scenarios follow

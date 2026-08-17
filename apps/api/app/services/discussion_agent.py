@@ -1,10 +1,10 @@
-"""One turn of a ticket-shaping discussion = one short-lived `claude -p` run
-in the repo checkout, resumed across turns via the CLI's session id.
+"""One turn of a ticket-shaping discussion = one short-lived `codex exec` run
+in the repo checkout, resumed across turns via the CLI's thread id.
 
-Read-only by construction: no permission mode is granted, so in print mode
-every write tool is auto-denied — the shaping agent can read the codebase but
-never touch it. The plane writes the frozen ticket itself through the tickets
-feature, keeping `tickets/` the single write surface.
+Read-only by construction: every initial and resumed command explicitly uses
+the read-only sandbox. The shaping agent can inspect the codebase but never
+touch it. The plane writes the frozen ticket itself through the tickets feature,
+keeping `tickets/` the single write surface.
 """
 
 import asyncio
@@ -42,6 +42,13 @@ FREEZE_PROMPT = (
 )
 
 _TIMEOUT_S = 180
+_SESSION_PREFIX = "codex:"
+_CODEX_PROFILE = (
+    "--json",
+    "-m", "gpt-5.6-sol",
+    "-c", "model_reasoning_effort=high",
+    "-c", "service_tier=priority",
+)
 
 
 class AgentError(Exception):
@@ -142,26 +149,75 @@ async def reply(
     skill_prompt: str | None = None,
 ) -> tuple[str, str]:
     """Run one agent turn in the checkout. Returns (session_id, reply_text)."""
-    system_prompt = _SYSTEM
+    resumed_thread_id = _resumed_thread_id(session_id)
+    prompt = _SYSTEM
     if skill_prompt:
-        system_prompt += f"\n\nUse this selected shaping skill:\n\n{skill_prompt}"
-    cmd = ["claude", "-p", message, "--output-format", "json",
-           "--append-system-prompt", system_prompt]
-    if session_id:
-        cmd += ["--resume", session_id]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd, cwd=repo_path,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
+        prompt += f"\n\nUse this selected shaping skill:\n\n{skill_prompt}"
+    prompt += f"\n\nThe owner's message for this turn is:\n\n{message}"
+
+    cmd = ["codex", "exec", "-s", "read-only", "-C", repo_path,
+           *_CODEX_PROFILE]
+    if resumed_thread_id:
+        cmd += ["resume", resumed_thread_id]
+    cmd.append(prompt)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, cwd=repo_path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as exc:
+        detail = exc.strerror or str(exc)
+        raise AgentError(f"could not start Codex: {detail}"[:300]) from None
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_S)
     except TimeoutError:
         proc.kill()
         raise AgentError("shaping agent timed out") from None
     if proc.returncode != 0:
-        raise AgentError((err or out).decode(errors="replace")[:300])
-    data = json.loads(out.decode())
-    return data.get("session_id", session_id or ""), data.get("result", "").strip()
+        detail = (err or out).decode(errors="replace").strip()
+        raise AgentError((detail or "Codex shaping turn failed")[:300])
+    return _codex_result(out, resumed_thread_id)
+
+
+def _resumed_thread_id(session_id: str | None) -> str | None:
+    if session_id is None:
+        return None
+    if not session_id.startswith(_SESSION_PREFIX):
+        raise AgentError(
+            "this discussion uses a legacy shaping session; start a new discussion"
+        )
+    thread_id = session_id.removeprefix(_SESSION_PREFIX)
+    if not thread_id:
+        raise AgentError("Codex returned an invalid response")
+    return thread_id
+
+
+def _codex_result(output: bytes, resumed_thread_id: str | None) -> tuple[str, str]:
+    """Extract the resumable thread and final agent message from Codex JSONL."""
+    thread_id = resumed_thread_id or ""
+    reply_text = ""
+    try:
+        events = [json.loads(line) for line in output.decode().splitlines() if line]
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise AgentError("Codex returned an invalid response") from None
+
+    for event in events:
+        if not isinstance(event, dict):
+            raise AgentError("Codex returned an invalid response")
+        if event.get("type") == "thread.started":
+            started_thread_id = event.get("thread_id", "")
+            thread_id = started_thread_id if isinstance(started_thread_id, str) else ""
+            continue
+        item = event.get("item", {})
+        if not isinstance(item, dict):
+            continue
+        if event.get("type") == "item.completed" and item.get("type") == "agent_message":
+            text = item.get("text", "")
+            reply_text = text.strip() if isinstance(text, str) else ""
+
+    if not thread_id or not reply_text:
+        raise AgentError("Codex returned an invalid response")
+    return f"{_SESSION_PREFIX}{thread_id}", reply_text
 
 
 def strip_fence(text: str) -> str:

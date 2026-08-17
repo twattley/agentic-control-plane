@@ -22,6 +22,10 @@ async def get_discussion(pool: asyncpg.Pool, discussion_id: int) -> Discussion |
     return Discussion(**dict(row)) if row else None
 
 
+async def delete_discussion(pool: asyncpg.Pool, discussion_id: int) -> None:
+    await pool.execute("DELETE FROM discussions WHERE id = $1", discussion_id)
+
+
 async def list_discussions(pool: asyncpg.Pool, repo_id: int) -> list[Discussion]:
     rows = await pool.fetch(
         f"SELECT {_COLS} FROM discussions WHERE repo_id = $1 ORDER BY updated_at DESC", repo_id

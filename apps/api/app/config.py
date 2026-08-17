@@ -18,10 +18,11 @@ class Settings(BaseSettings):
     # Auto-dispatch the next agent on each state transition. Off by default so
     # tests and read-only use never spawn processes; on for the live service.
     dispatch_enabled: bool = False
-    # Which provider runs each role. Flip to real CLIs on a real checkout;
-    # "stub" runs a fake agent (a tiny repo edit) to prove the chain safely.
-    builder_provider: str = "stub"
-    reviewer_provider: str = "stub"
+    # Dogfood defaults: Sonnet implements and Opus reviews. A stored per-run
+    # provider still wins, and local environment settings can override these
+    # fallbacks when testing with the stub.
+    builder_provider: str = "claude:sonnet"
+    reviewer_provider: str = "claude:opus"
     # Where a finished worker kicks the API to dispatch the next agent.
     api_url: str = "http://127.0.0.1:8400"
     # Permission mode for a Claude builder pass. "acceptEdits" auto-approves file
@@ -32,8 +33,8 @@ class Settings(BaseSettings):
     # effort flag, reproducing each CLI's default exactly. Peer knob to provider
     # and model: `_agent_command` translates it to the provider's own spelling
     # (claude `--effort`, codex `-c model_reasoning_effort=`).
-    builder_effort: str = ""
-    reviewer_effort: str = ""
+    builder_effort: str = "medium"
+    reviewer_effort: str = "high"
     # Max "changes" verdicts before the reviewer escalates to the human instead
     # of bouncing the run back to the builder — bounds build<->review spend.
     # Three rather than two: on the first laps the third round was repeatedly

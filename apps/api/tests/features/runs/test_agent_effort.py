@@ -7,7 +7,7 @@ Effort rides the settings seam (not the `provider[:model]` spec), mirroring how
 
 import subprocess
 
-from app.config import settings
+from app.config import Settings, settings
 from app.services import executor
 from app.worker import _agent_command
 
@@ -16,6 +16,25 @@ def _adjacent(cmd: list[str], flag: str) -> list[str]:
     """The flag and the token right after it — for asserting `["--effort", "high"]`."""
     i = cmd.index(flag)
     return cmd[i:i + 2]
+
+
+def test_dogfood_role_defaults_are_sonnet_medium_and_opus_high(monkeypatch):
+    for name in (
+        "AGENTIC_CONTROL_PLANE_BUILDER_PROVIDER",
+        "AGENTIC_CONTROL_PLANE_REVIEWER_PROVIDER",
+        "AGENTIC_CONTROL_PLANE_BUILDER_EFFORT",
+        "AGENTIC_CONTROL_PLANE_REVIEWER_EFFORT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    defaults = Settings(database_url="postgresql://unused", _env_file=None)
+
+    assert (
+        defaults.builder_provider,
+        defaults.builder_effort,
+        defaults.reviewer_provider,
+        defaults.reviewer_effort,
+    ) == ("claude:sonnet", "medium", "claude:opus", "high")
 
 
 # --- claude: a first-class --effort flag -----------------------------------
