@@ -49,6 +49,8 @@ def dispatch(run_id: int, role: str, provider: str | None = None) -> None:
         "AGENTIC_CONTROL_PLANE_BUILDER_PROVIDER": settings.builder_provider,
         "AGENTIC_CONTROL_PLANE_REVIEWER_PROVIDER": settings.reviewer_provider,
         "AGENTIC_CONTROL_PLANE_CLAUDE_PERMISSION_MODE": settings.claude_permission_mode,
+        "AGENTIC_CONTROL_PLANE_BUILDER_EFFORT": settings.builder_effort,
+        "AGENTIC_CONTROL_PLANE_REVIEWER_EFFORT": settings.reviewer_effort,
         "AGENTIC_CONTROL_PLANE_API_URL": settings.api_url,
         "AGENTIC_CONTROL_PLANE_AUTH_TOKEN": settings.auth_token,
     }

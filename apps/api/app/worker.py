@@ -43,8 +43,15 @@ def _split_spec(provider: str) -> tuple[str, str]:
     return base, model
 
 
+def _effort_for(role: str) -> str:
+    """The configured reasoning effort for this role's agent, or "" if unset."""
+    return {"builder": settings.builder_effort,
+            "reviewer": settings.reviewer_effort}.get(role, "")
+
+
 def _agent_command(role: str, provider: str, task: str, repo_path: str) -> list[str]:
     base, model = _split_spec(provider)
+    effort = _effort_for(role)
     if base == "stub":
         if role == "builder":
             # deterministic tiny edit so the builder produces a real git diff
@@ -53,13 +60,19 @@ def _agent_command(role: str, provider: str, task: str, repo_path: str) -> list[
     if base == "codex":
         # exec is non-interactive (no approval prompts); the sandbox governs writes.
         cmd = ["codex", "exec", task, "-s", "workspace-write", "-C", repo_path]
-        return cmd + ["-m", model] if model else cmd
+        if model:
+            cmd += ["-m", model]
+        if effort:  # a config override, not a dedicated flag
+            cmd += ["-c", f"model_reasoning_effort={effort}"]
+        return cmd
     if base == "claude":
         cmd = ["claude", "-p", task, "--output-format", "json"]
         if model:
             cmd += ["--model", model]
         if role != "reviewer":  # reviewer is read-only; builder needs write perms
             cmd += ["--permission-mode", settings.claude_permission_mode]
+        if effort:
+            cmd += ["--effort", effort]
         return cmd
     raise ValueError(f"unknown provider: {provider}")
 

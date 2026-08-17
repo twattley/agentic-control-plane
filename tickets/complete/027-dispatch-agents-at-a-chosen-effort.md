@@ -23,15 +23,13 @@ effort — rides entirely on the fully-confirmed `claude --effort` path.
 
 ## Status
 
-- State: in-progress
-- Phase: review
+- State: complete
+- Phase: done
 - Started: 2026-08-17 11:32:52 BST
-- Updated: 2026-08-17 11:47:51 BST
-- Completed: —
-- Last: 2026-08-17 11:47:51 BST - builder run ac6586945b68bf89, gate green
-  (223 passed, ruff clean); Claude builder test now pins the full argv per
-  Done When #1.
-- Next: reviewer re-checks run ac6586945b68bf89.
+- Updated: 2026-08-17 11:51
+- Completed: 2026-08-17 11:51
+- Last: close-ticket verified reviewer run ac6586945b68bf89 and close gate passed
+- Next: closed
 
 ## Why
 

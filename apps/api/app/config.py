@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # edits but still refuses unlisted Bash commands (allowlist those in the target
     # repo's .claude/settings.json); "bypassPermissions" is full yolo.
     claude_permission_mode: str = "acceptEdits"
+    # Reasoning effort each role's agent runs at, per role. Unset ("") emits no
+    # effort flag, reproducing each CLI's default exactly. Peer knob to provider
+    # and model: `_agent_command` translates it to the provider's own spelling
+    # (claude `--effort`, codex `-c model_reasoning_effort=`).
+    builder_effort: str = ""
+    reviewer_effort: str = ""
     # Max "changes" verdicts before the reviewer escalates to the human instead
     # of bouncing the run back to the builder — bounds build<->review spend.
     # Three rather than two: on the first laps the third round was repeatedly
