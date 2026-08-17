@@ -14,14 +14,15 @@ browser and the terminal reach the same quality of ticket.
 ## Status
 
 - State: ready
-- Phase: queued
+- Phase: shaped
 - Started: —
-- Updated: 2026-08-15
+- Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-15 - filed from a Control Plane session; the gap surfaced while
-  shaping the football stories, where the terminal skills were the better tool
-  and the UI could not reach them
-- Next: builder
+- Last: 2026-08-17 - open questions resolved with the owner: dropdown from
+  discovered skill directories, per-discussion, chosen at start. Sequenced
+  behind 028, which rewrites the same prompt seam this ticket makes swappable.
+- Next: builder claims — after 028 lands (shared write scope on
+  `discussion_agent.py` and `discussions/**`)
 
 ## Why
 
@@ -43,17 +44,30 @@ conversation. The chosen skill frames the session the way typing `/<skill>`
 would, and the discussion records which skill shaped it — so a frozen ticket
 can be read back knowing how it was produced.
 
-## Open Questions
+## Decisions (owner, 2026-08-17)
 
-- **Where does the skill list come from?** User-level (`~/.claude/skills`),
-  repo-level (`.claude/skills`), or both. Both is the honest answer, but it
-  needs a rule for name collisions.
-- **Does the skill apply per discussion or per message?** Per discussion is
-  simpler and matches how a terminal session behaves.
-- **Can the skill change mid-discussion?** Probably not — a session shaped
-  half one way and half another is hard to read back.
-- **What does freeze do with it?** At minimum record the skill name on the
-  discussion. Possibly note it on the frozen ticket.
+- **Where the list comes from:** discovered, not configured. The plane lists
+  skill directories on its own host — the user level (`~/.claude/skills/*/SKILL.md`)
+  and the repo checkout's level (`.claude/skills/*/SKILL.md`) — and reads each
+  skill's frontmatter `name` and `description` for the dropdown. Drop a new
+  skill into either directory and it appears on the next fetch; nothing is
+  registered anywhere. On a name collision the repo-level skill wins (most
+  specific), matching how the CLI resolves scoped skills.
+- **Cross-repo worry, resolved:** skills are *authored* in
+  agentic-engineering but *installed* to the skill directories — the plane
+  only lists what is installed on the host, the same relationship it already
+  has with the `scripts/` symlinks. No coupling to the kit repo.
+- **Per discussion, chosen at start**, like opening a terminal session with
+  `/<skill>`. No mid-discussion change — a session shaped half one way and
+  half another is hard to read back.
+- **Freeze records the skill name** on the discussion, and notes it on the
+  frozen ticket so the ticket can be read back knowing how it was produced.
+- **Framing mechanism:** the plane reads the chosen skill's `SKILL.md` body
+  and carries it into the session via `--append-system-prompt`, alongside the
+  base shaping prompt. Deterministic, and independent of whether `/<name>`
+  resolution works in `claude -p` print mode.
+- **Picking none** keeps the default shaping conversation (as hardened by
+  028); the dropdown's empty choice is first-class, not an error.
 
 ## Scope
 
@@ -71,8 +85,11 @@ can be read back knowing how it was produced.
   - `apps/api/app/services/state_machine.py`
   - `apps/api/schema/**`
 - `depends_on`:
-  - none
-- `parallelizable`: yes
+  - `028-a-ticket-shaped-in-the-ui-must-meet-the-contract-the-loop-enforces`
+    (soft: no logical dependency, but 028 rewrites `_SYSTEM`/`FREEZE_PROMPT`
+    and this ticket makes that seam skill-swappable — land 028 first)
+- `parallelizable`: no — shares `discussion_agent.py` and `discussions/**`
+  with ticket 028
 
 ## Validation
 
@@ -83,6 +100,9 @@ cd apps/web && npx tsc -b --noEmit
 
 ## Done When
 
+- [ ] The dropdown lists skills discovered from the user and repo skill
+      directories by reading `SKILL.md` frontmatter — adding a skill file
+      makes it appear on the next fetch, with no registration or restart.
 - [ ] A shaping discussion can be started with a named skill, or with none.
 - [ ] Starting with a skill produces a session framed as that skill would
       frame it in a terminal.
