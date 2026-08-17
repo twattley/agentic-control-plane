@@ -9,13 +9,13 @@
 
 ## Status
 
-- State: backlog
-- Phase: shape
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: found dogfooding transcriber run 5 (ticket S001-101); first approve failed the lane check
-- Next: prioritise from backlog, then RED-first the deterministic lane move
+- State: complete
+- Phase: done
+- Started: 2026-08-17 17:41:44 BST
+- Updated: 2026-08-17 18:00
+- Completed: 2026-08-17 18:00
+- Last: close-ticket verified reviewer run 8c61e93ac9997fd7 and close gate passed
+- Next: closed
 
 ## Story
 
@@ -65,7 +65,7 @@ And it must NOT consume an extra builder+reviewer cycle purely to move the file.
 
 - `allowed_paths`:
   - apps/api/app/worker.py
-  - apps/api/tests/features/runs/
+  - apps/api/tests/features/runs/**
 - `read_context_paths`:
   - apps/api/app/services/executor.py
   - ARCHITECTURE.md
@@ -88,7 +88,7 @@ builder, and asserts the ticket is in `tickets/in-progress/` with state
 
 ## Done When
 
-- [ ] Claiming the builder lease deterministically moves the ticket `ready → in-progress` (worker/engine, not an agent edit).
-- [ ] A reviewed, passing run whose ticket started in `ready` closes on the first approve.
-- [ ] No `gate_failed` is emitted for the ticket lane alone, and no extra builder+reviewer cycle is spent relocating the file.
-- [ ] Covered by a RED-first test; `make test` green.
+- [x] Claiming the builder lease deterministically moves the ticket `ready → in-progress` (worker/engine, not an agent edit).
+- [x] A reviewed, passing run whose ticket started in `ready` closes on the first approve.
+- [x] No `gate_failed` is emitted for the ticket lane alone, and no extra builder+reviewer cycle is spent relocating the file.
+- [x] Covered by a RED-first test; `make test` green.

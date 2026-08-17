@@ -266,9 +266,13 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         return "skipped"
 
     try:
-        return await _run_claimed_pass(
-            pool, run_id, role, provider, detail, repo, task
-        )
+        if role == "builder" and _move_ready_story_to_in_progress(
+            repo.path, detail.run.ticket_id
+        ):
+            # The pre-claim task proved the locator was safe. Resolve it again
+            # after the lifecycle move so the builder reads the live path.
+            task = _task_for(detail, role, repo.path)
+        return await _run_claimed_pass(pool, run_id, role, provider, detail, repo, task)
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         try:
@@ -286,6 +290,55 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
             # pulled back from its new owner.
             pass
         raise
+
+
+def _move_ready_story_to_in_progress(repo_path: str, ticket_id: str) -> bool:
+    """Move a claimed v1 story before the builder process starts.
+
+    The database lease says work has begun, so the checkout's lifecycle lane
+    must say the same thing without relying on the agent to edit its own ticket.
+    Legacy and already-in-progress tickets keep their existing behavior.
+    """
+    workflow = workflow_repo.load_workflow(repo_path)
+    if workflow.ticket_contract != "epic-story-v1":
+        return False
+    story = next(
+        (item for item in workflow.stories if item.story_id == ticket_id), None
+    )
+    if story is None or story.state != "ready":
+        return False
+
+    document = workflow_repo.document_from_workflow(repo_path, workflow, ticket_id)
+    root = Path(repo_path).resolve()
+    ready_lane = (root / "tickets" / "ready").resolve()
+    source = (root / document.path).resolve()
+    try:
+        lane_relative_path = source.relative_to(ready_lane)
+    except ValueError as exc:
+        raise workflow_repo.WorkflowDocumentError(
+            f"ready story {ticket_id!r} is outside tickets/ready"
+        ) from exc
+
+    destination = root / "tickets" / "in-progress" / lane_relative_path
+    if destination.exists():
+        raise FileExistsError(f"story destination already exists: {destination}")
+
+    updated, count = re.subn(
+        r"^- State: ready\s*$",
+        "- State: in-progress",
+        source.read_text(encoding="utf-8"),
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if count != 1:
+        raise workflow_repo.WorkflowDocumentError(
+            f"ready story {ticket_id!r} has no matching State field"
+        )
+    source.write_text(updated, encoding="utf-8")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source.replace(destination)
+    return True
 
 
 async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) -> str:
