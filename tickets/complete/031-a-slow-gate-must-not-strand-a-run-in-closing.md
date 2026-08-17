@@ -10,16 +10,13 @@ long-running gates are now the expected case, not the edge.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped from acp-015's review pass (finding: pre-existing,
-  but acp-015 is what makes slow gates likely). Renumbered from 018 into the
-  sequential queue; still valid against current worker.py (gate subprocesses
-  run unguarded).
-- Next: builder claims
+- State: complete
+- Phase: done
+- Started: 2026-08-17 12:27:54 BST
+- Updated: 2026-08-17 12:49
+- Completed: 2026-08-17 12:49
+- Last: close-ticket verified reviewer run ff658fd4e0bc505c and close gate passed
+- Next: closed
 
 ## Capability
 

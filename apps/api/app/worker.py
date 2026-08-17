@@ -378,6 +378,14 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
     return "done"
 
 
+def _process_failure_summary(
+    process_name: str, error: OSError | subprocess.TimeoutExpired
+) -> str:
+    if isinstance(error, subprocess.TimeoutExpired):
+        return f"{process_name} timed out after {error.timeout} seconds"
+    return f"{process_name} could not start: {error}"
+
+
 async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
     """Close the run in its repo's checkout: gate, then commit.
 
@@ -408,10 +416,17 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
         return await _close_with_repo_closer(pool, run_id, detail, repo, closer)
 
     if repo.close_gate_command:
-        gate = subprocess.run(
-            ["bash", "-lc", repo.close_gate_command],
-            cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
-        )
+        try:
+            gate = subprocess.run(
+                ["bash", "-lc", repo.close_gate_command],
+                cwd=repo.path, capture_output=True, text=True,
+                timeout=_TIMEOUT_S, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return await _post_gate(
+                pool, run_id, "gate_failed", repo.close_gate_command,
+                _process_failure_summary("gate command", error),
+            )
         if gate.returncode != 0:
             return await _post_gate(
                 pool, run_id, "gate_failed", repo.close_gate_command,
@@ -433,10 +448,20 @@ async def _close_with_repo_closer(
     # it under the same rules as the inline path, so a gate with `&&`, a pipe,
     # or a login-shell PATH behaves identically whichever closer the repo has.
     gate = f"bash -lc {shlex.quote(repo.close_gate_command or 'true')}"
-    result = subprocess.run(
-        [str(closer), detail.run.ticket_id, "--gate-command", gate],
-        cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
-    )
+    try:
+        result = subprocess.run(
+            [str(closer), detail.run.ticket_id, "--gate-command", gate],
+            cwd=repo.path, capture_output=True, text=True,
+            timeout=_TIMEOUT_S, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return await _post_gate(
+            pool,
+            run_id,
+            "gate_failed",
+            repo.close_gate_command,
+            _process_failure_summary("close_ticket", error),
+        )
     if result.returncode != 0:
         reason = (result.stderr + result.stdout).strip()[:500] or "close_ticket refused"
         return await _post_gate(

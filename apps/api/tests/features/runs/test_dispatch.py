@@ -1,5 +1,6 @@
 import subprocess
 
+from app import worker
 from app.worker import run_pass
 from tests.conftest import AUTH
 
@@ -106,6 +107,38 @@ async def test_closer_gate_fail_routes_to_needs_work(db, client, tmp_path):
     assert await run_pass(db, run_id, "closer", "system") == "done"
     assert await _state(client, run_id) == "needs_work"
     assert (await _gate_event(client, run_id))["payload"]["gate_command"] == "exit 1"
+
+
+async def test_slow_inline_gate_times_out_to_needs_work(
+    db, client, tmp_path, monkeypatch
+):
+    repo_dir = tmp_path / "repo"
+    _git_repo(repo_dir)
+    run_id = await _run_on(client, repo_dir, gate="sleep 1")
+    await _drive_to_closing(client, run_id)
+    monkeypatch.setattr(worker, "_TIMEOUT_S", 0.01)
+
+    assert await run_pass(db, run_id, "closer", "system") == "done"
+
+    assert await _state(client, run_id) == "needs_work"
+    event = await _gate_event(client, run_id)
+    assert event["type"] == "gate_failed"
+    assert "timed out" in event["payload"]["summary"]
+
+
+async def test_inline_gate_spawn_error_routes_to_needs_work(db, client, tmp_path):
+    repo_dir = tmp_path / "repo"
+    _git_repo(repo_dir)
+    run_id = await _run_on(client, repo_dir, gate="true")
+    await _drive_to_closing(client, run_id)
+    repo_dir.rename(tmp_path / "unavailable-repo")
+
+    assert await run_pass(db, run_id, "closer", "system") == "done"
+
+    assert await _state(client, run_id) == "needs_work"
+    event = await _gate_event(client, run_id)
+    assert event["type"] == "gate_failed"
+    assert "could not start" in event["payload"]["summary"]
 
 
 async def test_ungated_close_closes_and_says_so(db, client, tmp_path):

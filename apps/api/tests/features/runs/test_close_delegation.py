@@ -8,6 +8,7 @@ keeps the plane's inline gate-and-commit behaviour (pinned by test_dispatch)."""
 
 import subprocess
 
+from app import worker
 from app.worker import run_pass
 from tests.conftest import AUTH
 from tests.features.runs.test_dispatch import (
@@ -19,7 +20,9 @@ from tests.features.runs.test_dispatch import (
 )
 
 
-def _install_closer(repo_dir, exit_code: int = 0, stderr: str = "") -> None:
+def _install_closer(
+    repo_dir, exit_code: int = 0, stderr: str = "", delay_s: float = 0
+) -> None:
     """A fake close_ticket that records its argv and exits as told. The real
     one is pinned by the portable-close conformance suite; this one isolates
     the plane's half of the seam."""
@@ -29,6 +32,7 @@ def _install_closer(repo_dir, exit_code: int = 0, stderr: str = "") -> None:
     closer.write_text(
         "#!/bin/sh\n"
         'printf "%s\\n" "$*" >> closer_args.log\n'
+        + (f"sleep {delay_s}\n" if delay_s else "")
         + (f'printf "%s\\n" "{stderr}" >&2\n' if stderr else "")
         + f"exit {exit_code}\n"
     )
@@ -87,6 +91,40 @@ async def test_closer_refusal_surfaces_and_leaves_the_run_unclosed(db, client, t
         ["git", "-C", str(repo_dir), "log", "--oneline"], capture_output=True, text=True
     )
     assert "t1" not in log.stdout  # nothing committed on refusal
+
+
+async def test_slow_repo_closer_times_out_to_needs_work(
+    db, client, tmp_path, monkeypatch
+):
+    repo_dir = tmp_path / "repo"
+    _git_repo(repo_dir)
+    _install_closer(repo_dir, delay_s=1)
+    run_id = await _run_on(client, repo_dir, gate="true")
+    await _drive_to_closing(client, run_id)
+    monkeypatch.setattr(worker, "_TIMEOUT_S", 0.01)
+
+    assert await run_pass(db, run_id, "closer", "system") == "done"
+
+    assert await _state(client, run_id) == "needs_work"
+    event = await _gate_event(client, run_id)
+    assert event["type"] == "gate_failed"
+    assert "timed out" in event["payload"]["summary"]
+
+
+async def test_repo_closer_spawn_error_routes_to_needs_work(db, client, tmp_path):
+    repo_dir = tmp_path / "repo"
+    _git_repo(repo_dir)
+    _install_closer(repo_dir)
+    (repo_dir / "scripts" / "close_ticket").chmod(0o644)
+    run_id = await _run_on(client, repo_dir, gate="true")
+    await _drive_to_closing(client, run_id)
+
+    assert await run_pass(db, run_id, "closer", "system") == "done"
+
+    assert await _state(client, run_id) == "needs_work"
+    event = await _gate_event(client, run_id)
+    assert event["type"] == "gate_failed"
+    assert "could not start" in event["payload"]["summary"]
 
 
 async def test_non_pass_review_tags_the_closer_refusal_as_a_verdict_failure(
