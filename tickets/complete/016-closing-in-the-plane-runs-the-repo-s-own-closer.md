@@ -31,7 +31,7 @@ that have already accumulated.
   against the real tool's payload; the compact button gates on having the kit,
   not the contract marker. Scope widened, recorded below: README.md +
   HANDOFF.md described the pre-016 close. Review notes folded into follow-ups:
-  spawn OSError → acp-018, tail-vs-head truncation → acp-019. Accepted:
+  spawn OSError → acp-018, tail-vs-head truncation → acp-031 (shaped as acp-019, renumbered). Accepted:
   `mark_ready` keeps its own stamp/move — the kit has no promote command, so
   there is nothing to delegate to (Done When reworded to say "close
   lifecycle"); worker.py at ~530 lines wants a prompt-composition split,

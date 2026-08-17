@@ -72,7 +72,7 @@ this-repo maintenance.
    touch — everything above ran the terminal path.
 3. Then the ready lane: `acp-013` (style bounce writes the convention down),
    `acp-018` (slow/broken gate strands a run in `closing`; also covers spawn
-   OSError), `acp-019` (500-char truncation eats reviewer instructions; also
+   OSError), `acp-031` (renumbered from acp-019, rescoped: tail-keeping and marked cuts; also
    covers tail-vs-head for gate output — higher stakes now that `gate_failed`
    feeds the fix round), `acp-030` (choose a skill when shaping; renumbered from acp-011).
 
@@ -105,7 +105,7 @@ open** and will capture the "New ticket" button until closed.
   project page — they close ungated (visibly). Seeded: transcriber, racing,
   football, this repo. Not seeded: agentic-engineering, trading, others.
 - **Agent messages are truncated to 500 characters** (`worker.py`). Ticketed:
-  acp-019.
+  acp-031 (formerly acp-019).
 - **A gate/closer that hangs or can't spawn strands the run in `closing`**
   with no event. Ticketed: acp-018.
 - **Ticket numbers collide across repos.** Two 015s/016s/017s exist. Say
