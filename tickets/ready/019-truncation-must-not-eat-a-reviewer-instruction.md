@@ -1,12 +1,24 @@
-# Ticket 019: Truncation must not eat a reviewer instruction
+# Ticket 019: Truncation must not eat an instruction the fix round needs
 
 ## Summary
 
-Agent messages are truncated to 500 characters in `worker.py` before posting.
-On transcriber run 3 this ate a reviewer finding mid-word, and the builder
-could not act on an instruction it never received — the fix round was spent
-addressing half a sentence. Human notes are not truncated; the agents'
-words deserve the same respect, or at least a bound the loop can survive.
+Rescoped 2026-08-17: the original complaint — reviewer findings cut at 500
+chars, a transcriber run 3 fix round spent on half a sentence — was largely
+fixed by `7cd5768`, which gave reviewer summaries their own 4000-char budget
+(`_FINDINGS_CHARS`, with the reasoning written down beside it). What remains
+is the two ways a cut can still eat signal:
+
+1. **Gate output keeps the wrong end.** Both `gate_failed` paths — the inline
+   gate (`worker.py:372`) and the delegated closer refusal (`worker.py:395`)
+   — do `[:500]`, keeping the HEAD of `stdout+stderr`. For a failing test
+   suite the head is the platform banner; the failing test names and the
+   assertion live in the TAIL. Since acp-016 these summaries feed the
+   builder's next fix round directly, so the cut discards exactly the work
+   order. (acp-025 carries reviewer findings past a *verdict* refusal, so
+   that sub-case is covered; a red code gate is not.)
+2. **Every cut is silent.** A reviewer summary over 4000 chars, or gate
+   output over 500, is chopped mid-word with no marker — the builder cannot
+   tell a complete instruction from a beheaded one.
 
 ## Status
 
@@ -15,49 +27,73 @@ words deserve the same respect, or at least a bound the loop can survive.
 - Started: —
 - Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-17 - shaped from the 2026-08-17 handoff's known-traps list
-  ("not yet ticketed — worth doing")
-- Next: builder claims
+- Last: 2026-08-17 - rescoped against current worker.py: findings budget
+  (7cd5768) and verdict-refusal carry-through (acp-025) already landed;
+  what's left is gate-output direction and marking every cut.
+- Next: builder claims — after 027 releases `apps/api/app/worker.py`
+  (currently in review); then sequence against 013/018/029, which share the
+  file.
 
 ## Why
 
-The reviewer's summary is not a log line: `_newest_instruction` feeds it back
-to the builder verbatim as the fix instruction. Cutting it at 500 characters
-cuts the actual work order. The bound exists so a rambling agent cannot stuff
-megabytes into an event payload — the fix is a bound generous enough to carry
-a real review (findings routinely run 1-3k chars), applied where display
-needs it rather than where instructions are stored.
+A truncation bound exists so a rambling agent cannot stuff megabytes into an
+event payload. That is the only job it has. A bound that keeps the banner and
+drops the assertion, or that cuts without saying so, is doing a second job
+nobody asked for: quietly degrading the very text the next pass runs on. The
+doom-loop lesson from the E001-S01 lap applies here directly — a builder
+acting on partial instructions burns a whole round producing the wrong fix.
 
 ## Capability
 
-The full reviewer verdict and builder brief reach the event payload intact up
-to a generous bound (e.g. 10k chars, cut at a word boundary with an explicit
-"… [truncated]" marker so a cut is visible, never signal-free). The builder's
-next fix round receives the same text the reviewer wrote.
+Gate-failure summaries keep the tail: when the combined output of a failed
+gate or a closer refusal exceeds the budget, the worker keeps the END, where
+pytest's failure summary and a closer's one-line reason both live. The budget
+for gate output rises to something a real failure summary fits in (~2000
+chars is enough for pytest's short-summary block; the builder judges the
+exact number and writes the reasoning beside it, as `_FINDINGS_CHARS` does).
 
-Added from acp-016's review — direction matters as much as size: a failed
-close gate's useful signal is the TAIL of the test output (the head is a
-platform banner), while a closer refusal's one-line reason survives either
-way. `gate_failed` summaries should keep the tail; instructions and briefs
-the head. As of acp-016, `gate_failed` summaries feed the builder's next fix
-round directly, which raises the cost of eating them.
+Every truncation is visible: any cut — findings, brief, or gate output —
+lands on a whitespace boundary and carries an explicit marker (e.g.
+`[… truncated]` / `[truncated …]` at the cut end) so a reader, human or
+agent, always knows text is missing and from which end.
+
+Reviewer findings and builder briefs keep their existing budgets and keep the
+head — those numbers were reasoned recently and are not this ticket's
+problem; only the silent-cut part touches them.
 
 ## Scope
 
 - `allowed_paths`:
   - `apps/api/app/worker.py`
   - `apps/api/tests/features/runs/**`
+- `forbidden_paths`:
+  - `apps/api/app/services/state_machine.py`
 - `depends_on`: none
-- `parallelizable`: yes
+- `parallelizable`: no — shares `apps/api/app/worker.py` with 027 (active),
+  013, 018, and 029.
 
 ## Validation
 
 ```bash
 uv run --project apps/api pytest apps/api/tests/
+uv run --project apps/api ruff check apps/api
 ```
 
 ## Done When
 
-- [ ] A 3k-char reviewer summary reaches the builder's next task text intact.
-- [ ] A pathological payload is still bounded, and the cut is marked, not
-      silent.
+- [ ] A failed inline gate whose output ends with pytest's short summary
+      posts a `gate_failed` summary containing that tail, not the banner.
+- [ ] A delegated-closer refusal keeps the tail of its output the same way.
+- [ ] A reviewer summary over `_FINDINGS_CHARS` arrives cut on a whitespace
+      boundary with a visible truncation marker; one under it arrives
+      untouched, no marker.
+- [ ] A pathological multi-megabyte payload is still bounded on every path.
+
+## Non-goals
+
+- Raising `_FINDINGS_CHARS` or `_BRIEF_CHARS` — both were sized deliberately
+  in `7cd5768`; revisit only if a real run shows a complete review that
+  doesn't fit.
+- Storing full untruncated output as an artifact — if a truncated gate
+  summary ever proves insufficient in practice, that's a follow-up ticket,
+  not this one.
