@@ -32,8 +32,15 @@ needs it rather than where instructions are stored.
 
 The full reviewer verdict and builder brief reach the event payload intact up
 to a generous bound (e.g. 10k chars, cut at a word boundary with an explicit
-"… [truncated]" marker so a cut is visible, never silent). The builder's next
-fix round receives the same text the reviewer wrote.
+"… [truncated]" marker so a cut is visible, never signal-free). The builder's
+next fix round receives the same text the reviewer wrote.
+
+Added from acp-016's review — direction matters as much as size: a failed
+close gate's useful signal is the TAIL of the test output (the head is a
+platform banner), while a closer refusal's one-line reason survives either
+way. `gate_failed` summaries should keep the tail; instructions and briefs
+the head. As of acp-016, `gate_failed` summaries feed the builder's next fix
+round directly, which raises the cost of eating them.
 
 ## Scope
 

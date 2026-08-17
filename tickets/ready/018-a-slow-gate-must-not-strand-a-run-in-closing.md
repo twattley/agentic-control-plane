@@ -26,6 +26,12 @@ routes to `needs_work` via `gate_failed`, and the event says the gate timed
 out rather than that its tests failed. No run is ever left in `closing` with
 no event explaining why.
 
+Same class, added from acp-016's review: `OSError` on spawning the gate or the
+repo's `scripts/close_ticket` (not executable, bad shebang) is equally
+unhandled and strands the run the same way. Handle the family, not the one
+symptom — `(OSError, subprocess.TimeoutExpired)`, as the workflow feature's
+subprocess calls already do.
+
 ## Scope
 
 - `allowed_paths`:

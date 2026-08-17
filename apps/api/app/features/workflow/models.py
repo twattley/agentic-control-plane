@@ -140,3 +140,32 @@ class AuthoredStory(BaseModel):
     state: str
     title: str
     path: str
+
+
+class CompactIn(BaseModel):
+    """Run the repo's own history sweep. The destructive direction must be
+    asked for: the default is a dry-run preview of what would move."""
+
+    #: Only compact tickets completed before this YYYY-MM-DD date.
+    before: str | None = None
+    dry_run: bool = True
+
+
+class CompactedTicket(BaseModel):
+    title: str
+    completed: str
+    path: str
+    note: str
+
+
+class CompactResult(BaseModel):
+    """Mirror of `agent_workflow compact`'s payload."""
+
+    ledger_file: str
+    compacted: list[CompactedTicket]
+    archived_runs: list[str]
+    #: Completed-lane files with no Status block — documents, left alone.
+    preserved: list[str]
+    #: Runs still claimed whose ticket is gone: stale locks worth a look.
+    stale_claims: list[str]
+    dry_run: bool

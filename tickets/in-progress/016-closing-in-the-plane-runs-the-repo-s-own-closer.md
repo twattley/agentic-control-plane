@@ -17,14 +17,27 @@ that have already accumulated.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-16
+- State: in-progress
+- Phase: review done, awaiting human review
+- Started: 2026-08-17
+- Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-16 - noticed while squaring up after the S001 lap, where the
-  ticket had to be closed from a terminal after the plane said it was done
-- Next: builder claims, after 014
+- Last: 2026-08-17 - built test-first by claude, reviewed by standards-reviewer
+  (nothing blocking). Review fixes landed: the delegated gate now runs under
+  `bash -lc` so both close paths obey the same shell rules; `gate_failed`
+  summaries feed the builder's next fix round (a refusal used to bounce the
+  builder with stale findings and no reason); the e2e now asserts the commit
+  carried the lane move (clean tree + file list); CompactResult is pinned
+  against the real tool's payload; the compact button gates on having the kit,
+  not the contract marker. Scope widened, recorded below: README.md +
+  HANDOFF.md described the pre-016 close. Review notes folded into follow-ups:
+  spawn OSError → acp-018, tail-vs-head truncation → acp-019. Accepted:
+  `mark_ready` keeps its own stamp/move — the kit has no promote command, so
+  there is nothing to delegate to (Done When reworded to say "close
+  lifecycle"); worker.py at ~530 lines wants a prompt-composition split,
+  follow-up not scope. 179 pytest, ruff, tsc, build green.
+- Next: human review, then close + commit. Worth dogfooding one real close
+  against football-api-project (eight completed tickets awaiting a sweep).
 
 ## Why
 
@@ -86,6 +99,10 @@ would be swept before anything moves.
   - `apps/web/src/features/projects/**`
   - `apps/web/src/api/hooks.ts`
   - `packages/domain-types/src/index.ts`
+  - `README.md` (widened 2026-08-17: described the pre-016 close and the
+    pre-017 review cap)
+  - `HANDOFF.md` (widened 2026-08-17: its known-trap entry is what this
+    ticket fixes)
 - `read_context_paths`:
   - `ARCHITECTURE.md`
   - `tickets/ready/014-a-plane-authored-ticket-must-close-with-the-portable-closer.md`
@@ -104,13 +121,24 @@ cd apps/web && npx tsc -b --noEmit
 
 ## Done When
 
-- [ ] Closing an approved run leaves the ticket stamped complete and in the
-      complete lane, with no terminal step.
-- [ ] Aged history is swept as part of that close, using the repo's own
-      compaction window.
-- [ ] A closer refusal — red gate, non-pass verdict, wrong lane — surfaces its
-      reason in the plane and leaves the run unclosed.
-- [ ] The plane contains no second implementation of stamping or lane movement.
-- [ ] A repo can be compacted on demand from the project view, previewing what
-      would move before it moves.
-- [ ] A legacy-flat repo with no `close_ticket` still closes as it does today.
+- [x] Closing an approved run leaves the ticket stamped complete and in the
+      complete lane, with no terminal step. (Pinned end-to-end against the real
+      kit: `test_plane_close_runs_the_repos_real_closer_end_to_end` — run
+      closed, ticket stamped in `complete/`, lane move inside the commit.)
+- [x] Aged history is swept as part of that close, using the repo's own
+      compaction window. (The plane passes no `--no-compact`; close_ticket's
+      default sweep runs.)
+- [x] A closer refusal — red gate, non-pass verdict, wrong lane — surfaces its
+      reason in the plane and leaves the run unclosed. (`gate_failed` with the
+      refusal verbatim; the reason also becomes the builder's next fix
+      instruction rather than a silent bounce.)
+- [x] The plane contains no second implementation of the close lifecycle —
+      stamping and lane movement at close belong to `close_ticket` alone.
+      (`mark_ready`'s backlog→ready promotion stays: the kit has no promote
+      command, so there is nothing to delegate to; its output is driven
+      through the real kit by the conformance suite.)
+- [x] A repo can be compacted on demand from the project view, previewing what
+      would move before it moves. (POST /workflow/compact, dry-run by default;
+      CompactCard's preview → confirm.)
+- [x] A legacy-flat repo with no `close_ticket` still closes as it does today.
+      (The inline path is untouched and pinned by test_dispatch.)

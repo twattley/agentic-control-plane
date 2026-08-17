@@ -84,8 +84,10 @@ and 016 close the two-closers seam. acp-017 is done.
   ate a reviewer finding mid-word on transcriber run 3, and the builder could
   not act on an instruction it never received. Human notes are *not* truncated.
   Not yet ticketed — worth doing.
-- **The plane's closer does not move the ticket lane.** A closed run leaves its
-  ticket in `in-progress/` forever. acp-016.
+- ~~**The plane's closer does not move the ticket lane.**~~ Fixed by acp-016
+  (2026-08-17): a repo with `scripts/close_ticket` gets the full delegated
+  close — gate, stamp, lane move, sweep — then the plane's commit. Repos
+  without the kit keep the inline gate-and-commit.
 - **Ticket numbers collide across repos.** There are two 015s, two 016s, and
   two 017s. Say `acp-017` / `ae-017`, never a bare number.
 - **agentic-control-plane is not registered** in the plane and has no kit

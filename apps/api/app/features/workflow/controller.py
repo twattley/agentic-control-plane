@@ -8,6 +8,8 @@ from app.features.workflow import repository
 from app.features.workflow.models import (
     AdoptIn,
     AuthoredStory,
+    CompactIn,
+    CompactResult,
     StoryCreateIn,
     WorkflowDocument,
     WorkflowProjection,
@@ -80,6 +82,17 @@ async def adopt_legacy(repo_id: int, data: AdoptIn) -> AuthoredStory:
         )
     except repository.WorkflowDocumentError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except repository.WorkflowAuthorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except repository.WorkflowReadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/compact")
+async def compact(repo_id: int, data: CompactIn) -> CompactResult:
+    repo = await _repo_or_404(repo_id)
+    try:
+        return repository.compact(repo.path, data)
     except repository.WorkflowAuthorError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except repository.WorkflowReadError as exc:

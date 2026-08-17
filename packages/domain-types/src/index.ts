@@ -257,6 +257,33 @@ export interface AuthoredStory {
   path: string
 }
 
+/** Run the repo's own history sweep. Mirrors CompactIn; dry_run defaults true
+ * server-side — the destructive direction must be asked for. */
+export interface CompactInput {
+  /** Only compact tickets completed before this YYYY-MM-DD date. */
+  before?: string | null
+  dry_run: boolean
+}
+
+export interface CompactedTicket {
+  title: string
+  completed: string
+  path: string
+  note: string
+}
+
+/** Mirror of `agent_workflow compact`'s payload (CompactResult). */
+export interface CompactResult {
+  ledger_file: string
+  compacted: CompactedTicket[]
+  archived_runs: string[]
+  /** Completed-lane files with no Status block — documents, left alone. */
+  preserved: string[]
+  /** Runs still claimed whose ticket is gone: stale locks worth a look. */
+  stale_claims: string[]
+  dry_run: boolean
+}
+
 /** A ticket-shaping discussion — the strand that exists before a ticket is
  * frozen. Mirrors Discussion. */
 export type DiscussionState = 'open' | 'frozen'

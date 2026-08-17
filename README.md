@@ -44,12 +44,14 @@ the decisions that are actually yours. Open `http://localhost:5400` (or
 
    Each hop spawns a detached worker that runs the agent CLI in the repo
    checkout, posts its results as events, and the state machine dispatches the
-   next role. Review bounces are capped (default 2) before escalating to you.
+   next role. Review bounces are capped (default 3) before escalating to you.
 
 5. **Approve from the Inbox.** The run parks at `awaiting_human` with the
-   diff, the brief, and the reviewer's verdict. Approve → close → the closer
-   runs the repo's gate command and, on green, **commits locally** (never
-   pushes — pushing stays a human act).
+   diff, the brief, and the reviewer's verdict. Approve → close → in a repo
+   carrying `scripts/close_ticket`, the closer delegates the whole close to it
+   — gate, ticket stamp, lane move, history sweep — then **commits locally**
+   (never pushes — pushing stays a human act). A repo without it gets the
+   inline close: run the repo's gate command and, on green, commit.
 
 That's the whole loop: shape → freeze → ready → build → review → approve →
 commit, with the workbench answering "where did I get to?" whenever you

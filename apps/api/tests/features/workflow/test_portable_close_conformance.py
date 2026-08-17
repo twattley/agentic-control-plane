@@ -18,8 +18,9 @@ import pytest
 
 from app.config import settings
 from app.features.workflow import repository as workflow_repo
-from app.features.workflow.models import StoryCreateIn
-from app.worker import _STATUS_FIELDS, REVIEW_PHASE
+from app.features.workflow.models import CompactIn, StoryCreateIn
+from app.worker import _STATUS_FIELDS, REVIEW_PHASE, run_pass
+from tests.conftest import AUTH
 
 #: Where the canonical kit checkout lives. Overridable so a machine with an
 #: unusual layout can still run the only cross-system check; ACP_REQUIRE_PORTABLE_KIT=1
@@ -115,20 +116,21 @@ def test_adopted_story_satisfies_the_portable_contract(tmp_path):
     assert story.diagnostic_codes == []
 
 
-def test_plane_authored_story_closes_with_the_portable_closer(tmp_path):
-    """The whole lap with no hand edits: plane authors and promotes, the kit
-    claims and posts, the builder's one instructed status transition is applied
-    mechanically from the same constant the prompt uses, and the portable
-    closer accepts the file. Every S001 repair would fail this test."""
-    repo = _kit_repo(tmp_path)
-
+def _authored_ready_story(repo: Path, title: str):
+    """Author through the plane and promote to ready — where a run can start."""
     authored = workflow_repo.create_story(str(repo), StoryCreateIn(
-        epic_id=None, coordination_class="feature", title="Prove the lap",
+        epic_id=None, coordination_class="feature", title=title,
         body="## Story\n\nOne honest lap through both systems.\n",
     ))
-    ready = workflow_repo.mark_ready(str(repo), authored.story_id)
+    return workflow_repo.mark_ready(str(repo), authored.story_id)
 
-    claim = _kit(repo, "claim", authored.story_id, "builder",
+
+def _kit_review_cycle(repo: Path, ready) -> Path:
+    """The kit's claim/post cycle to a reviewer pass — what a protocol-following
+    builder and reviewer do in the checkout during a run. The one instructed
+    status transition is applied mechanically, from the same constant the
+    plane's prompt uses. Returns the ticket's in-progress path."""
+    claim = _kit(repo, "claim", ready.story_id, "builder",
                  "--agent", "conformance-builder", "--ticket", ready.path)
     run_id = claim["run"]["id"]
     ticket = repo / "tickets" / "in-progress" / Path(ready.path).name
@@ -142,13 +144,23 @@ def test_plane_authored_story_closes_with_the_portable_closer(tmp_path):
 
     _kit(repo, "post-findings", run_id, "--json",
          json.dumps({"goal": "prove the lap", "changed_files": [], "focus_areas": []}))
-    _kit(repo, "claim", authored.story_id, "reviewer",
+    _kit(repo, "claim", ready.story_id, "reviewer",
          "--agent", "conformance-reviewer", "--ticket", f"tickets/in-progress/{ticket.name}")
     _kit(repo, "post-findings", run_id, "--json",
          json.dumps({"verdict": "pass", "issues": []}))
+    return ticket
+
+
+def test_plane_authored_story_closes_with_the_portable_closer(tmp_path):
+    """The whole lap with no hand edits: plane authors and promotes, the kit
+    claims and posts, and the portable closer accepts the file. Every S001
+    repair would fail this test."""
+    repo = _kit_repo(tmp_path)
+    ready = _authored_ready_story(repo, "Prove the lap")
+    ticket = _kit_review_cycle(repo, ready)
 
     close = subprocess.run(
-        [str(repo / "scripts" / "close_ticket"), authored.story_id,
+        [str(repo / "scripts" / "close_ticket"), ready.story_id,
          "--gate-command", "true", "--no-compact"],
         cwd=repo, capture_output=True, text=True, check=False,
     )
@@ -162,3 +174,83 @@ def test_plane_authored_story_closes_with_the_portable_closer(tmp_path):
     assert fields["State"] == "complete"
     assert fields["Phase"] == "done"
     assert fields["Completed"] not in ("", "—")
+
+
+async def test_plane_close_runs_the_repos_real_closer_end_to_end(db, client, tmp_path):
+    """The two-closers seam, closed (acp-016): a run driven through the plane's
+    own state machine reaches `closed` AND the ticket ends stamped in
+    `complete/` — gate, stamp, lane move, and commit, with no terminal step."""
+    repo = _kit_repo(tmp_path)
+    ready = _authored_ready_story(repo, "Prove the seam")
+    story_id = ready.story_id
+
+    # The run starts while the story is ready; the kit's claim (a
+    # protocol-following builder's first act) moves it to in-progress after.
+    repo_id = (await client.post(
+        "/api/v1/repos",
+        json={"slug": "conformance", "name": "Conformance", "path": str(repo),
+              "close_gate_command": "test -f tickets/README.md"},
+        headers=AUTH,
+    )).json()["id"]
+    run_id = (await client.post(
+        "/api/v1/runs",
+        json={"repo_id": repo_id, "ticket_id": story_id, "title": "Prove the seam"},
+        headers=AUTH,
+    )).json()["id"]
+    ticket = _kit_review_cycle(repo, ready)
+
+    async def post(path, body):
+        await client.post(f"/api/v1/runs/{run_id}{path}", json=body, headers=AUTH)
+    await post("/claim", {"role": "builder", "holder": "codex"})
+    await post("/events", {"type": "builder_brief_posted", "actor": "builder"})
+    await post("/claim", {"role": "reviewer", "holder": "claude"})
+    await post("/events", {"type": "reviewer_findings_posted", "actor": "reviewer",
+                           "payload": {"verdict": "pass"}})
+    await post("/decision", {"decision": "approve"})
+    await post("/decision", {"decision": "close"})
+
+    assert await run_pass(db, run_id, "closer", "system") == "done"
+
+    detail = (await client.get(f"/api/v1/runs/{run_id}", headers=AUTH)).json()
+    assert detail["run"]["state"] == "closed"
+
+    completed = repo / "tickets" / "complete" / ticket.name
+    assert completed.is_file()
+    assert not ticket.exists()
+    fields = _kit_contract().story_status_fields(completed.read_text())
+    assert fields["State"] == "complete"
+    assert fields["Phase"] == "done"
+
+    log = subprocess.run(
+        ["git", "-C", str(repo), "log", "--oneline"], capture_output=True, text=True
+    )
+    assert story_id in log.stdout  # the plane committed after the closer
+
+    # The commit carried the whole close — lane move included — leaving nothing
+    # behind: a clean tree is the proof the stamp is in history, not just on disk.
+    porcelain = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+    )
+    assert porcelain.stdout.strip() == ""
+    shown = subprocess.run(
+        ["git", "-C", str(repo), "show", "--name-only", "--format=", "HEAD"],
+        capture_output=True, text=True,
+    )
+    assert f"tickets/complete/{ticket.name}" in shown.stdout
+
+    event = next(e for e in reversed(detail["events"]) if e["type"] == "gate_passed")
+    assert event["payload"]["gate_command"] == "test -f tickets/README.md"
+
+
+def test_kit_compact_payload_matches_the_planes_mirror(tmp_path):
+    """`CompactResult` mirrors `compact_completed`'s payload. Pinned against
+    the real tool's output — not the fixture the plane wrote for itself — so a
+    payload change in the kit fails here, not in the project view."""
+    repo = _kit_repo(tmp_path)
+
+    result = workflow_repo.compact(str(repo), CompactIn(before="2026-01-01", dry_run=True))
+
+    # model_validate inside compact() is the shape assertion; the values just
+    # confirm the flags reached the tool.
+    assert result.dry_run is True
+    assert result.compacted == []

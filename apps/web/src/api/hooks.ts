@@ -2,6 +2,8 @@ import type {
   AdoptInput,
   AuthoredStory,
   BoardPane,
+  CompactInput,
+  CompactResult,
   CoordinationClass,
   DecisionInput,
   Discussion,
@@ -186,6 +188,19 @@ export function useMarkStoryReady(repoId: number) {
     mutationFn: (storyId: string) =>
       apiPost<AuthoredStory>(`/repos/${repoId}/workflow/stories/${storyId}/ready`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', repoId] }),
+  })
+}
+
+export function useCompact(repoId: number) {
+  return useMutation({
+    mutationFn: (body: CompactInput) =>
+      apiPost<CompactResult>(`/repos/${repoId}/workflow/compact`, body),
+    onSuccess: (result) => {
+      // A dry run moves nothing; only the real sweep changes the board.
+      if (!result.dry_run) {
+        queryClient.invalidateQueries({ queryKey: ['workflow', repoId] })
+      }
+    },
   })
 }
 

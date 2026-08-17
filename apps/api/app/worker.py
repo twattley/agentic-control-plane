@@ -16,6 +16,7 @@ checkout to go live.
 import asyncio
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -176,18 +177,22 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
 
 
 async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
-    """Run the repo's own close gate in its checkout, then commit the run's
-    changes there.
+    """Close the run in its repo's checkout: gate, then commit.
 
-    The gate command belongs to the run's repo (`repos.close_gate_command`), so
-    two repos with different test commands close correctly in the same service.
-    Gate green -> `gate_passed` (state closing -> closed). Gate red -> `gate_failed`
-    (back to needs_work for a fix). No gate -> the run still closes, and the
-    event says so out loud: which gate ran — or that none did — is a recorded
-    fact about the run, never a silent default. Commits locally; never pushes
-    (that stays a deliberate human/CI action). Safe to run twice: a second
-    closer finds the run already past `closing` and the transition raises ->
-    skipped.
+    A repo carrying `scripts/close_ticket` owns the whole close — the plane
+    delegates gate, ticket stamp, lane move, and history sweep to it, then
+    commits (the one thing close_ticket refuses to do by design). A repo
+    without it keeps the inline path: run the repo's own gate command, commit.
+
+    Either way the gate belongs to the run's repo (`repos.close_gate_command`),
+    so two repos with different test commands close correctly in the same
+    service. Gate green -> `gate_passed` (state closing -> closed). Gate red or
+    closer refusal -> `gate_failed` (back to needs_work). No gate -> the run
+    still closes, and the event says so out loud: which gate ran — or that
+    none did — is a recorded fact about the run, never a silent default.
+    Commits locally; never pushes (that stays a deliberate human/CI action).
+    Safe to run twice: a second closer finds the run already past `closing`
+    and the transition raises -> skipped.
     """
     detail = await runs_service.run_detail(pool, run_id)
     if detail.run.state != "closing":
@@ -195,6 +200,10 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
     repo = await repos_repo.get_repo(pool, detail.run.repo_id)
     if repo is None:
         return "skipped"
+
+    closer = Path(repo.path) / "scripts" / "close_ticket"
+    if closer.is_file():
+        return await _close_with_repo_closer(pool, run_id, detail, repo, closer)
 
     if repo.close_gate_command:
         gate = subprocess.run(
@@ -207,6 +216,34 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
                 (gate.stdout + gate.stderr).strip()[:500] or "gate command failed",
             )
 
+    return await _commit_and_close(pool, run_id, detail, repo, closed_by=None)
+
+
+async def _close_with_repo_closer(
+    pool: asyncpg.Pool, run_id: int, detail, repo, closer: Path
+) -> str:
+    """Delegate stamp, lane move, and history sweep to the repo's own closer —
+    one implementation of the ticket lifecycle, in the portable kit. The plane
+    contributes what close_ticket refuses to do by design: the commit. A
+    refusal (red gate, non-pass verdict, wrong lane) is the closer doing its
+    job; its reason is the event, and the run goes back to needs_work."""
+    # close_ticket splits the gate without a shell; wrapping in `bash -lc` runs
+    # it under the same rules as the inline path, so a gate with `&&`, a pipe,
+    # or a login-shell PATH behaves identically whichever closer the repo has.
+    gate = f"bash -lc {shlex.quote(repo.close_gate_command or 'true')}"
+    result = subprocess.run(
+        [str(closer), detail.run.ticket_id, "--gate-command", gate],
+        cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
+    )
+    if result.returncode != 0:
+        reason = (result.stderr + result.stdout).strip()[:500] or "close_ticket refused"
+        return await _post_gate(pool, run_id, "gate_failed", repo.close_gate_command, reason)
+    return await _commit_and_close(pool, run_id, detail, repo, closed_by=closer.name)
+
+
+async def _commit_and_close(
+    pool: asyncpg.Pool, run_id: int, detail, repo, closed_by: str | None
+) -> str:
     _stage_all(repo.path)
     commit = subprocess.run(
         ["git", "-C", repo.path,
@@ -215,8 +252,14 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
         capture_output=True, text=True, check=False,
     )
     note = commit.stdout.strip()[:300] or commit.stderr.strip()[:300] or "committed"
+    if closed_by:
+        note = f"closed by scripts/{closed_by}. {note}"
     if not repo.close_gate_command:
-        note = f"ungated close — no close gate configured; nothing was verified. {note}"
+        # The delegated closer still verified lane, phase, and reviewer verdict
+        # — only the code gate was a no-op. Inline, nothing at all ran.
+        fact = ("the code gate was a no-op" if closed_by
+                else "nothing was verified")
+        note = f"ungated close — no close gate configured; {fact}. {note}"
     return await _post_gate(pool, run_id, "gate_passed", repo.close_gate_command or None, note)
 
 
@@ -285,10 +328,14 @@ class _Instruction(NamedTuple):
 #: requests changes has usually just disagreed with a reviewer who passed the
 #: work, so recency decides: whoever spoke last is the one being answered.
 #: Prompting from the findings alone told the builder to fix "no blocking
-#: findings" — the objection never reached it.
+#: findings" — the objection never reached it. A failed close is the same trap
+#: from the other side: after `gate_failed` the run routes to needs_work, and
+#: without this entry the builder is re-prompted with stale reviewer findings
+#: and never told the gate or the repo's closer refused.
 _INSTRUCTION_SOURCES = {
     "human_note_posted": ("note", "human review", "Requested changes"),
     "reviewer_findings_posted": ("summary", "reviewer findings", "Findings"),
+    "gate_failed": ("summary", "close failure", "The close failed with"),
 }
 
 

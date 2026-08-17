@@ -16,6 +16,7 @@ import {
   useWorkflowDocumentByPath,
 } from '../../api/hooks'
 import { CloseGateCard } from './CloseGateCard'
+import { CompactCard } from './CompactCard'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
 import { EpicSelect, STANDALONE, parentForApi } from './EpicSelect'
@@ -828,6 +829,10 @@ export function ProjectView() {
           </Link>
         ))}
       </section>
+
+      {/* Gated on having the kit (what the backend actually requires), not on
+          the contract marker — a kit repo that hasn't adopted it can still sweep. */}
+      {workflow && workflow.source !== 'legacy-flat' && <CompactCard repoId={repoId} />}
     </div>
   )
 }

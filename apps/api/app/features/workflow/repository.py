@@ -10,6 +10,8 @@ from pydantic import ValidationError
 from app.features.tickets.repository import list_tickets, ticket_summary
 from app.features.workflow.models import (
     AuthoredStory,
+    CompactIn,
+    CompactResult,
     SchemaVersion,
     StoryCreateIn,
     WorkflowDocument,
@@ -282,6 +284,41 @@ def _split_title(content: str, fallback: str) -> tuple[str, str]:
         if line.startswith("# "):
             return line[2:].strip(), "\n".join(lines[i + 1:]).strip()
     return fallback, content.strip()
+
+
+#: Compaction moves real files around; give it room the snapshot read never needs.
+_COMPACT_TIMEOUT_SECONDS = 60
+
+
+def compact(repo_path: str, data: CompactIn) -> CompactResult:
+    """Run the repo's own history sweep — the same one every close performs,
+    exposed as an action for backlogs that accumulated before delegation."""
+    root = Path(repo_path).resolve()
+    command = root / "scripts" / "agent_workflow"
+    if not command.is_file():
+        raise WorkflowAuthorError(
+            "repo has no scripts/agent_workflow — install the workflow kit to compact"
+        )
+    argv = [str(command), "compact"]
+    if data.before:
+        argv += ["--before", data.before]
+    if data.dry_run:
+        argv += ["--dry-run"]
+    try:
+        result = subprocess.run(
+            argv, cwd=root, capture_output=True, text=True,
+            timeout=_COMPACT_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError) as exc:
+        raise WorkflowReadError(f"compact failed: {exc}") from exc
+    if result.returncode != 0:
+        raise WorkflowReadError(
+            f"compact failed: {(result.stderr or result.stdout).strip()[:300]}"
+        )
+    try:
+        return CompactResult.model_validate(json.loads(result.stdout))
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise WorkflowReadError("compact emitted an unexpected payload") from exc
 
 
 def mark_ready(repo_path: str, story_id: str) -> AuthoredStory:

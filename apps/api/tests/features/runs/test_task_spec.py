@@ -360,3 +360,22 @@ def test_legacy_flat_builder_task_carries_no_status_contract(tmp_path):
     task = _task_for(_detail(), "builder", str(tmp_path))
 
     assert "review-loop" not in task
+
+
+def test_fix_pass_carries_the_close_failure_when_it_is_the_newest_word(tmp_path):
+    """After gate_failed the run routes back to the builder. Prompting from the
+    stale reviewer findings tells it to fix work the reviewer passed — the
+    refusal it was sent back for never reaches it."""
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "No blocking findings."}
+    )
+    gate = SimpleNamespace(
+        type="gate_failed",
+        payload={"summary": "Ticket is at Phase: green; close requires review-loop.",
+                 "gate_command": "uv run pytest"},
+    )
+
+    task = _task_for(_detail(events=[findings, gate]), "builder", str(tmp_path))
+
+    assert "close requires review-loop" in task
+    assert "No blocking findings." not in task
