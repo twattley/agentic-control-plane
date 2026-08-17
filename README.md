@@ -95,7 +95,6 @@ make init-db
 
 make serve    # or run the API in the foreground
 make web      # or run Vite in the foreground
-make mobile   # Expo
 ```
 
 Useful `.env` switches: `AGENTIC_CONTROL_PLANE_DISPATCH_ENABLED=true` for the

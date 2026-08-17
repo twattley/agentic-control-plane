@@ -7,7 +7,6 @@
 ```
 apps/api/     Python 3.11 · FastAPI · asyncpg · PostgreSQL
 apps/web/     React 19 · Vite · TanStack Query v5 · Tailwind CSS
-apps/mobile/  Expo 54 · React Navigation v7 · TanStack Query v5
 packages/     domain-types — shared TypeScript types
 ```
 

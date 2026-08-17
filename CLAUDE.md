@@ -12,7 +12,6 @@ Portable agentic control plane for the builder/reviewer agent handoff loop — o
 apps/
   api/      Python FastAPI — business logic, SQL queries, CLI
   web/      React 19 + Vite — browser interface
-  mobile/   Expo 54 + React Native — iOS/Android app
 packages/
   domain-types/  TypeScript interfaces mirroring the Python Pydantic models
 ```
@@ -23,7 +22,6 @@ packages/
 |---|---|
 | `make serve` | FastAPI on :8400 |
 | `make web` | Vite dev server on :5400 |
-| `make mobile` | Expo (iOS sim or device) |
 | `make init-db` | Apply schema/*.sql migrations |
 | `make install` | uv sync + npm install |
 | `make test` | pytest (backend) |
@@ -49,5 +47,4 @@ AGENTIC_CONTROL_PLANE_DATABASE_URL     — PostgreSQL connection string (require
 - `instructions/testing-instructions.md` — pytest setup, fixture patterns
 - `apps/api/README.md` — Python API structure
 - `apps/web/README.md` — React app structure
-- `apps/mobile/README.md` — Expo structure
 - `packages/domain-types/README.md` — TypeScript contract

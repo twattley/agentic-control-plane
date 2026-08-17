@@ -1,7 +1,7 @@
 # packages/domain-types
 
 TypeScript interfaces mirroring the Python Pydantic models in `apps/api`.
-Both `apps/web` and `apps/mobile` import from `@agentic-control-plane/domain-types`.
+The web client imports them from `@agentic-control-plane/domain-types`.
 
 ## Usage
 
