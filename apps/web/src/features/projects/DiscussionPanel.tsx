@@ -8,6 +8,9 @@ import {
   useSendDiscussionMessage, useStartDiscussion,
 } from '../../api/hooks'
 import { EpicSelect, STANDALONE } from './EpicSelect'
+import {
+  compose, TEMPLATE_FIELDS, TEMPLATE_KIND_LABELS, type TemplateKind, type TemplateValues,
+} from './discussionTemplates'
 
 const CLASSES: CoordinationClass[] = ['feature', 'contract', 'platform', 'validation']
 
@@ -64,7 +67,16 @@ export function DiscussionPanel({
   const send = useSendDiscussionMessage(repoId)
   const freeze = useFreezeDiscussion(repoId)
 
-  const [draft, setDraft] = useState('')
+  // The draft is derived rather than typed directly so that picking a
+  // template and typing plain text share one code path through `compose` —
+  // 'none' just passes the `raw` value through unchanged.
+  const [templateKind, setTemplateKind] = useState<TemplateKind>('none')
+  const [templateValues, setTemplateValues] = useState<TemplateValues>({})
+  const draft = compose(templateKind, templateValues)
+  const setRaw = (value: string) => setTemplateValues((v) => ({ ...v, raw: value }))
+  const setField = (key: string, value: string) => (
+    setTemplateValues((v) => ({ ...v, [key]: value }))
+  )
   const [skillName, setSkillName] = useState('')
   const [slug, setSlug] = useState('')
   const [epicId, setEpicId] = useState(epics?.[0]?.epic_id ?? STANDALONE)
@@ -81,10 +93,16 @@ export function DiscussionPanel({
     if (discussionId === null) {
       start.mutate(
         { message: draft, ...(skillName ? { skill_name: skillName } : {}) },
-        { onSuccess: (d) => { setStartedId(d.discussion.id); setDraft('') } },
+        {
+          onSuccess: (d) => {
+            setStartedId(d.discussion.id)
+            setTemplateKind('none')
+            setTemplateValues({})
+          },
+        },
       )
     } else {
-      send.mutate({ id: discussionId, message: draft }, { onSuccess: () => setDraft('') })
+      send.mutate({ id: discussionId, message: draft }, { onSuccess: () => setRaw('') })
     }
   }
 
@@ -117,18 +135,46 @@ export function DiscussionPanel({
       </div>
 
       {discussionId === null ? (
-        <label className="block space-y-1 text-sm text-slate-600">
-          <span>Shaping method</span>
-          <select value={skillName} onChange={(e) => setSkillName(e.target.value)}
-            className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm">
-            <option value="">Plain conversation</option>
-            {skills.data?.map((skill) => (
-              <option key={skill.name} value={skill.name}>
-                {skill.name} — {skill.description}
-              </option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label className="block space-y-1 text-sm text-slate-600">
+            <span>Shaping method</span>
+            <select value={skillName} onChange={(e) => setSkillName(e.target.value)}
+              className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm">
+              <option value="">Plain conversation</option>
+              {skills.data?.map((skill) => (
+                <option key={skill.name} value={skill.name}>
+                  {skill.name} — {skill.description}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm text-slate-600">
+            <span>Start from</span>
+            <select value={templateKind}
+              onChange={(e) => {
+                setTemplateKind(e.target.value as TemplateKind)
+                setTemplateValues({})
+              }}
+              className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm">
+              {(Object.entries(TEMPLATE_KIND_LABELS) as [TemplateKind, string][]).map(
+                ([kind, label]) => <option key={kind} value={kind}>{label}</option>,
+              )}
+            </select>
+          </label>
+          {templateKind !== 'none' && (
+            <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3">
+              {TEMPLATE_FIELDS[templateKind].map((field) => (
+                <label key={field.key} className="block space-y-1 text-sm text-slate-600">
+                  <span>{field.label}{field.optional ? ' (optional)' : ''}</span>
+                  <textarea rows={1} value={templateValues[field.key] ?? ''}
+                    onChange={(e) => setField(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
+                </label>
+              ))}
+            </div>
+          )}
+        </>
       ) : detail?.discussion.skill_name ? (
         <p className="text-xs text-slate-400">
           Shaping with {detail.discussion.skill_name}
@@ -147,7 +193,14 @@ export function DiscussionPanel({
       </div>
 
       {discussionId === null && latestOpen !== null && (
-        <button type="button" onClick={() => setResumedId(latestOpen.id)}
+        <button type="button"
+          onClick={() => {
+            setResumedId(latestOpen.id)
+            // The picker only applies to starting a new discussion — an
+            // in-flight template selection must not leak into the resumed
+            // reply box.
+            setTemplateKind('none')
+          }}
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm text-slate-500">
           Carry on with the unfinished draft from{' '}
           {new Date(latestOpen.updated_at).toLocaleDateString()} instead
@@ -155,12 +208,19 @@ export function DiscussionPanel({
       )}
 
       <div className="flex gap-2">
-        <textarea rows={2} value={draft} onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
-          }}
-          placeholder={discussionId === null ? 'What do you want to build?' : 'Reply…'}
-          className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm" />
+        {discussionId === null && templateKind !== 'none' ? (
+          <div className="flex-1 whitespace-pre-wrap rounded border border-dashed
+            border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+            {draft || 'Fill in the fields above to compose the opening message.'}
+          </div>
+        ) : (
+          <textarea rows={2} value={draft} onChange={(e) => setRaw(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+            }}
+            placeholder={discussionId === null ? 'What do you want to build?' : 'Reply…'}
+            className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm" />
+        )}
         <button type="button" onClick={submit} disabled={busy || !draft.trim()}
           className="min-w-24 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-40">
           {sending ? 'Thinking…' : 'Send'}
