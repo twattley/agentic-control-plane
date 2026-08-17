@@ -53,10 +53,18 @@ can be read back knowing how it was produced.
   skill into either directory and it appears on the next fetch; nothing is
   registered anywhere. On a name collision the repo-level skill wins (most
   specific), matching how the CLI resolves scoped skills.
-- **Cross-repo worry, resolved:** skills are *authored* in
-  agentic-engineering but *installed* to the skill directories — the plane
-  only lists what is installed on the host, the same relationship it already
-  has with the `scripts/` symlinks. No coupling to the kit repo.
+- **Cross-repo worry, resolved:** agentic-engineering stays the canonical
+  *authorship* source — skills are written there and reach the skill
+  directories (Claude and Codex alike) only through its install/sync. The
+  plane deliberately reads the installed layer, not the kit repo, because the
+  dropdown's question is *runtime* truth: what a session on this host can
+  actually run. That keeps the UI and a terminal pane in exact agreement (a
+  skill authored but never installed appears in neither), and spares the
+  plane a config path to the kit repo — the same consume-the-installed-
+  artifact relationship it already has with the `scripts/` symlinks. The
+  standing discipline, not policed by the plane: skills are authored in
+  agentic-engineering and installed via its sync, never hand-dropped into
+  the skill directories.
 - **Per discussion, chosen at start**, like opening a terminal session with
   `/<skill>`. No mid-discussion change — a session shaped half one way and
   half another is hard to read back.
