@@ -74,7 +74,7 @@ this-repo maintenance.
    `acp-018` (slow/broken gate strands a run in `closing`; also covers spawn
    OSError), `acp-019` (500-char truncation eats reviewer instructions; also
    covers tail-vs-head for gate output — higher stakes now that `gate_failed`
-   feeds the fix round), `acp-011` (choose a skill when shaping).
+   feeds the fix round), `acp-030` (choose a skill when shaping; renumbered from acp-011).
 
 ## Repo state
 

@@ -1,4 +1,4 @@
-# Ticket 011: Choose a skill when shaping a ticket
+# Ticket 030: Choose a skill when shaping a ticket
 
 ## Summary
 
@@ -21,6 +21,7 @@ browser and the terminal reach the same quality of ticket.
 - Last: 2026-08-17 - open questions resolved with the owner: dropdown from
   discovered skill directories, per-discussion, chosen at start. Sequenced
   behind 028, which rewrites the same prompt seam this ticket makes swappable.
+  Renumbered from 011 (never started) so the shaping lane reads in order.
 - Next: builder claims — after 028 lands (shared write scope on
   `discussion_agent.py` and `discussions/**`)
 
@@ -86,7 +87,7 @@ can be read back knowing how it was produced.
   - `apps/web/src/features/projects/DiscussionPanel.tsx`
   - `apps/web/src/api/hooks.ts`
   - `packages/domain-types/src/index.ts`
-  - `tickets/**/011-choose-a-skill-when-shaping-a-ticket.md`
+  - `tickets/**/030-choose-a-skill-when-shaping-a-ticket.md`
 - `read_context_paths`:
   - `ARCHITECTURE.md`
 - `forbidden_paths`:

@@ -41,7 +41,7 @@ Depth must follow size. A chore should freeze after one confirming bounce; a
 feature deserves the grilling — scenarios, boundary cases, an explicit "should
 not happen." This ticket hardens the *default* conversation to size itself
 sensibly; picking a specific interrogation style by hand (the skill dropdown)
-is ticket 011, which layers on the seam this ticket rewrites.
+is ticket 030, which layers on the seam this ticket rewrites.
 
 ## Capability
 
@@ -85,7 +85,7 @@ button was pressed.
   - `apps/web/**`
 - `depends_on`: none
 - `parallelizable`: yes against the worker tickets (027, 029) and the web
-  ticket (026) — but not against 011, which shares `discussion_agent.py` and
+  ticket (026) — but not against 030, which shares `discussion_agent.py` and
   `discussions/**` and is sequenced behind this ticket.
 
 ## Validation
@@ -111,7 +111,7 @@ uv run --project apps/api ruff check apps/api
 ## Non-goals
 
 - The skill dropdown — choosing a specific shaping skill for the discussion
-  is ticket 011, sequenced after this one. Here, the owner steers depth in
+  is ticket 030, sequenced after this one. Here, the owner steers depth in
   plain words ("this is a chore, just freeze it").
 - Validating the *quality* of scenarios or the correctness of the proposed
   boundary — that stays human judgment at freeze time and reviewer judgment
