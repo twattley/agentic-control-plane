@@ -139,8 +139,7 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         _agent_command(role, provider, task, repo.path),
         cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
     )
-    summary = _agent_message(result.stdout or "", provider).strip()[:500] \
-        or f"{provider} {role} pass complete"
+    summary = _summary(result.stdout or "", provider, role)
 
     if role == "builder":
         # Capture first for a tidy checkout. `_stage_all` separately protects
@@ -288,6 +287,24 @@ def _agent_message(stdout: str, provider: str) -> str:
     return stdout
 
 
+#: A builder brief is a caption on the board — three clamped lines in the web
+#: view — so a headline's worth of it is enough.
+_BRIEF_CHARS = 500
+
+#: Reviewer findings are not a caption. The summary is the whole instruction the
+#: fix round receives, and each blocking finding now carries a file, a line and
+#: the change required, so a headline's worth would drop every finding after the
+#: first and leave the builder re-diagnosing the diff.
+_FINDINGS_CHARS = 4000
+
+
+def _summary(stdout: str, provider: str, role: str) -> str:
+    """The agent's final message, trimmed to what its reader actually needs."""
+    budget = _FINDINGS_CHARS if role == "reviewer" else _BRIEF_CHARS
+    message = _agent_message(stdout, provider).strip()[:budget]
+    return message or f"{provider} {role} pass complete"
+
+
 def _parse_verdict(stdout: str, provider: str) -> str:
     """Extract 'pass' | 'changes' from an agent's review output.
 
@@ -372,9 +389,15 @@ def _task_for(detail, role: str, repo_path: str) -> str:
         diff = next((a.content for a in reversed(detail.artifacts) if a.kind == "diff"), "")
         return (
             f"Review this diff for {run.ticket_id}: {run.title}.{spec}\n"
-            "Assess correctness and safety. End your reply with exactly one line: "
-            "'VERDICT: pass' if it correctly and safely implements the task, or "
-            "'VERDICT: changes' followed by what must be fixed.\n\n"
+            "Assess correctness and safety. Before the final verdict, list each "
+            "blocking finding. For each blocking finding, name the file and the line "
+            "or function where applicable, then state the specific change required. "
+            "If a finding is a genuine judgment call with no single correct fix, "
+            "name its location and ask a concrete question instead. If there are no "
+            "blocking findings, do not invent locations or changes. End your reply "
+            "with exactly one standalone line: 'VERDICT: pass' if it correctly and "
+            "safely implements the task, or 'VERDICT: changes' if blocking findings "
+            "must be fixed.\n\n"
             f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
     status = _status_contract_note(workflow, run.ticket_id)

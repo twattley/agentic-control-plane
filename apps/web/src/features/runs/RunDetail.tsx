@@ -4,7 +4,6 @@ import type {
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useDecide, useDispatch, usePostEvent, useRun } from '../../api/hooks'
-import { DocumentBody } from '../projects/DocumentBody'
 import { DiffView } from './DiffView'
 import { StateBadge } from './StateBadge'
 
@@ -46,29 +45,6 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
-// A run that exhausted its change rounds also lands on the human — but it is a
-// rejection, not an approval. Showing both as "pass" is how a rejected change
-// got approved and committed.
-function ReviewerFindings({ findings }: { findings: Event }) {
-  const { verdict, escalated } = findings.payload as {
-    verdict?: string; escalated?: boolean
-  }
-  const badge = escalated
-    ? { label: '✋ changes · rounds spent, over to you', tone: 'text-amber-700' }
-    : verdict === 'pass'
-      ? { label: '✅ pass', tone: 'text-green-700' }
-      : { label: '✋ changes', tone: 'text-amber-700' }
-
-  return (
-    <Panel title="Reviewer findings">
-      <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
-        <span className={`mr-2 font-medium ${badge.tone}`}>{badge.label}</span>
-        {payloadText(findings) || <span className="text-slate-400">no detail</span>}
-      </div>
-    </Panel>
-  )
-}
-
 // Which gate ran before the close commit, and how it went. An ungated close
 // reached `closed` without anything running — that must read as a warning,
 // never as a green tick. Only an explicit `gate_command: null` means ungated:
@@ -99,12 +75,6 @@ function CloseGate({ event }: { event: Event }) {
       </div>
     </Panel>
   )
-}
-
-function timelineLabel(e: Event): string {
-  const { gate_command } = e.payload as { gate_command?: string | null }
-  if (e.type === 'gate_passed' && gate_command === null) return 'closed ungated'
-  return e.type.replace(/_/g, ' ')
 }
 
 function ActionBar({ data }: { data: RunDetailData }) {
@@ -221,11 +191,10 @@ export function RunDetailPage() {
 
   const { run, events, artifacts } = data
   const brief = latest(events, 'builder_brief_posted')
-  const findings = latest(events, 'reviewer_findings_posted')
+  const briefText = brief ? payloadText(brief).replace(/\s+/g, ' ').trim() : ''
   const gate = [...events].reverse()
     .find((e) => e.type === 'gate_passed' || e.type === 'gate_failed')
   const diff = latestArtifact(artifacts, 'diff')
-  const evidence = latestArtifact(artifacts, 'evidence')
 
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col">
@@ -240,27 +209,10 @@ export function RunDetailPage() {
             <p className="text-sm text-slate-500">{run.ticket_id}</p>
             {DISPATCHABLE.includes(run.state) && <ReRunButton id={run.id} />}
           </div>
+          {briefText && <p className="truncate text-sm text-slate-600">{briefText}</p>}
         </header>
 
         {gate && <CloseGate event={gate} />}
-
-        {findings && <ReviewerFindings findings={findings} />}
-
-        {brief && (
-          <Panel title="Builder brief">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
-              {payloadText(brief) || <span className="text-slate-400">no detail</span>}
-            </div>
-          </Panel>
-        )}
-
-        {evidence && (
-          <Panel title="Evidence">
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <DocumentBody content={evidence.content} />
-            </div>
-          </Panel>
-        )}
 
         {diff && (
           <Panel title="Diff">
@@ -268,16 +220,6 @@ export function RunDetailPage() {
           </Panel>
         )}
 
-        <Panel title="Timeline">
-          <ol className="space-y-1 text-sm">
-            {events.map((e) => (
-              <li key={e.id} className="flex gap-2 text-slate-600">
-                <span className="text-slate-400">{e.actor}</span>
-                <span className="font-medium">{timelineLabel(e)}</span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
       </div>
 
       <ActionBar data={data} />

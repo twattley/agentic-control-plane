@@ -39,6 +39,19 @@ def test_reviewer_task_points_at_ticket_file_when_present(tmp_path):
     assert "VERDICT" in task
 
 
+def test_reviewer_task_requires_located_actionable_findings(tmp_path):
+    """One anchor per contract clause, not the prompt's wording — a copy edit
+    that keeps the contract should not fail this test."""
+    task = _task_for(_detail(), "reviewer", str(tmp_path))
+
+    assert "blocking finding" in task  # findings are enumerated, not prose
+    assert "name the file and the line" in task  # located
+    assert "the specific change required" in task  # actionable
+    assert "judgment call" in task  # exempt from a single correct fix...
+    assert "name its location" in task  # ...but never from a location
+    assert "no blocking findings, do not invent" in task  # a pass stays a pass
+
+
 def test_fix_pass_keeps_spec_pointer(tmp_path):
     (tmp_path / "tickets").mkdir()
     (tmp_path / "tickets" / "SBX-3.md").write_text("# spec")
