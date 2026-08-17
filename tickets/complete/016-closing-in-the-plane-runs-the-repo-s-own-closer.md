@@ -17,12 +17,12 @@ that have already accumulated.
 
 ## Status
 
-- State: in-progress
-- Phase: review done, awaiting human review
+- State: complete
+- Phase: done
 - Started: 2026-08-17
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - built test-first by claude, reviewed by standards-reviewer
+- Updated: 2026-08-17 06:46
+- Completed: 2026-08-17 06:46
+- Last: close-ticket verified reviewer run 77df6350073bed2b and close gate passed
   (nothing blocking). Review fixes landed: the delegated gate now runs under
   `bash -lc` so both close paths obey the same shell rules; `gate_failed`
   summaries feed the builder's next fix round (a refusal used to bounce the
@@ -36,7 +36,7 @@ that have already accumulated.
   there is nothing to delegate to (Done When reworded to say "close
   lifecycle"); worker.py at ~530 lines wants a prompt-composition split,
   follow-up not scope. 179 pytest, ruff, tsc, build green.
-- Next: human review, then close + commit. Worth dogfooding one real close
+- Next: closed
   against football-api-project (eight completed tickets awaiting a sweep).
 
 ## Why

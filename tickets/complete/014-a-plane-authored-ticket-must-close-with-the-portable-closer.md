@@ -13,12 +13,12 @@ the plane creates and drives must satisfy the portable contract at every step.
 
 ## Status
 
-- State: in-progress
-- Phase: review done, awaiting human review
+- State: complete
+- Phase: done
 - Started: 2026-08-17
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - built test-first by claude, reviewed by standards-reviewer
+- Updated: 2026-08-17 06:45
+- Completed: 2026-08-17 06:45
+- Last: close-ticket verified reviewer run 4791bd4e650c1e03 and close gate passed
   (nothing blocking; all four load-bearing findings fixed: backslash-unsafe
   re.sub replacement, fence-unaware status stripping that ate documented
   examples, the field list not pinned against the kit, and kit discovery that
@@ -28,7 +28,7 @@ the plane creates and drives must satisfy the portable contract at every step.
   delegation to close_ticket is the natural backstop (its refusals become the
   enforcement). Red-check performed: stashing the fix fails 4 tests on exactly
   the S001 defects. 168 pytest, ruff clean.
-- Next: human review, then close + commit
+- Next: closed
 
 ## Why
 

@@ -12,12 +12,12 @@ The gate is a property of the repository. Store it there.
 
 ## Status
 
-- State: in-progress
-- Phase: review done, awaiting human review
+- State: complete
+- Phase: done
 - Started: 2026-08-17
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - built test-first by claude, reviewed by standards-reviewer
+- Updated: 2026-08-17 06:45
+- Completed: 2026-08-17 06:45
+- Last: close-ticket verified reviewer run 7283fcd6609510fb and close gate passed
   (nothing blocking; both settle-before-close findings fixed: stale doc
   references to the removed env var, and pre-015 gate events misreading as
   ungated). Scope widened, recorded below: `apps/web/src/api/hooks.ts` (the
@@ -29,7 +29,7 @@ The gate is a property of the repository. Store it there.
   018 (slow gate strands a run in closing), 019 (500-char truncation eats
   reviewer instructions). Migration applied to dev DB; existing repos carry no
   gate until set once in the UI.
-- Next: human review, then close + commit
+- Next: closed
 
 ## Why
 
