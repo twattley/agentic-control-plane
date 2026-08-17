@@ -67,15 +67,25 @@ def claim_transition(state: str, role: str) -> str:
 def event_transition(state: str, event_type: str, payload: dict | None = None) -> str | None:
     """New state after an event, or None when the event doesn't move state.
 
+    A builder or reviewer can explicitly declare a blocked disposition, which
+    routes directly to the human and leaves no agent-owned state to dispatch.
     A reviewer's findings split on `payload['verdict']`: 'pass' sends the run to
     the human, anything else (changes requested) sends it back to the builder —
     unless `payload['escalated']` says the run has spent its change rounds, in
     which case a rejection goes to the human too, still recorded as a rejection.
     """
+    event_payload = payload or {}
+    if event_type == "builder_brief_posted" and event_payload.get("disposition") == "blocked":
+        if state not in {"building", "fixing"}:
+            raise IllegalTransitionError(state, event_type)
+        return "awaiting_human"
+
     if event_type == "reviewer_findings_posted":
         if state != "reviewing":
             raise IllegalTransitionError(state, event_type)
-        findings = payload or {}
+        findings = event_payload
+        if findings.get("disposition") == "blocked":
+            return "awaiting_human"
         if findings.get("escalated"):
             return "awaiting_human"
         return "awaiting_human" if findings.get("verdict") == "pass" else "needs_work"

@@ -359,6 +359,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
         cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
     )
     summary = _summary(result.stdout or "", provider, role)
+    disposition = _parse_disposition(result.stdout or "", provider)
 
     if role == "builder":
         # A moved HEAD means the builder committed — the E001-S01 rogue pass
@@ -396,6 +397,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
             EventIn(type="builder_brief_posted", actor="builder",
                     payload={"summary": summary, "headline": _headline(summary),
                              "provider": provider,
+                             "disposition": disposition,
                              "checkout_mark": _checkout_mark(repo.path)}),
         )
     else:
@@ -407,6 +409,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
         payload = {
             "verdict": outcome.verdict,
             "escalated": outcome.escalated,
+            "disposition": disposition,
             "summary": summary,
             "provider": provider,
             "checkout_mark": _checkout_mark(repo.path),
@@ -686,6 +689,14 @@ def _parse_verdict(stdout: str, provider: str) -> str:
     return "pass"
 
 
+def _parse_disposition(stdout: str, provider: str) -> str | None:
+    """Read the explicit escape hatch without guessing from ordinary prose."""
+    message = _agent_message(stdout, provider)
+    if re.search(r"^DISPOSITION:\s*blocked\s*$", message, re.IGNORECASE | re.MULTILINE):
+        return "blocked"
+    return None
+
+
 class _ReviewOutcome(NamedTuple):
     verdict: str
     escalated: bool
@@ -795,21 +806,35 @@ def _task_for(detail, role: str, repo_path: str) -> str:
             f"Review this diff for {run.ticket_id}: {run.title}.{spec}\n"
             "End your reply with exactly one standalone line: 'VERDICT: pass' if it "
             "correctly and safely implements the task, or 'VERDICT: changes' if "
-            "blocking findings must be fixed.\n\n"
+            "blocking findings must be fixed. If an unmet dependency or required "
+            "human decision prevents progress, add exactly one standalone "
+            "'DISPOSITION: blocked' line immediately before the verdict. Do not use "
+            "that disposition for fixable review findings.\n\n"
             f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
     status = _status_contract_note(workflow, run.ticket_id)
     instruction = _newest_instruction(detail.events)
     evidence = _evidence_invitation(run.id)
+    blocked = _builder_blocked_disposition_note()
     if instruction:
         convention = _convention_note() if instruction.from_human else ""
         return (f"Address the {instruction.source} on {run.ticket_id}: {run.title}.{spec} "
-                f"{instruction.label}: {instruction.text}{status}{convention}{evidence}")
+                f"{instruction.label}: {instruction.text}{status}{convention}{evidence}"
+                f"{blocked}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it "
-                f"passes.{status}{evidence}")
-    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{evidence}"
+                f"passes.{status}{evidence}{blocked}")
+    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{evidence}{blocked}"
+
+
+def _builder_blocked_disposition_note() -> str:
+    return (
+        " If you cannot proceed because of an unmet dependency or a required "
+        "human decision, end your reply with exactly one standalone line: "
+        "'DISPOSITION: blocked'. Do not use that disposition for fixable test "
+        "failures or code changes."
+    )
 
 
 def _convention_note() -> str:

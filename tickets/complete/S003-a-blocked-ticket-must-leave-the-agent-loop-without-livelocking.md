@@ -9,13 +9,13 @@
 
 ## Status
 
-- State: backlog
-- Phase: shape
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: found dogfooding football run 6 (E001-S06); ~5 builder↔reviewer cycles, no convergence
-- Next: prioritise, then RED-first an agent-declared blocked disposition
+- State: complete
+- Phase: done
+- Started: 2026-08-17 18:01:04 BST
+- Updated: 2026-08-17 18:27
+- Completed: 2026-08-17 18:27
+- Last: close-ticket verified reviewer run ddf2542ef8654029 and close gate passed
+- Next: closed
 
 ## Story
 
@@ -72,7 +72,7 @@ And the run must NOT burn further builder/reviewer cycles waiting for the slow s
 - `allowed_paths`:
   - apps/api/app/worker.py
   - apps/api/app/services/state_machine.py
-  - apps/api/tests/features/runs/
+  - apps/api/tests/features/runs/**
 - `read_context_paths`:
   - apps/api/app/services/executor.py
   - apps/api/app/config.py
@@ -95,8 +95,8 @@ plus a strike-out test that N no-progress laps escalate to `awaiting_human`.
 
 ## Done When
 
-- [ ] A builder pass that declares "cannot proceed / blocked" moves the run to a non-dispatching state instead of `awaiting_review`.
-- [ ] A reviewer confirming blocked routes to the human, not back to `needs_work`.
-- [ ] The existing consecutive-no-progress strike-out remains as a backstop, but no longer the *first* line of defence.
-- [ ] A ticket both agents agree is blocked stops after one cycle, not ~5.
-- [ ] Covered by RED-first tests; `make test` green.
+- [x] A builder pass that declares "cannot proceed / blocked" moves the run to a non-dispatching state instead of `awaiting_review`.
+- [x] A reviewer confirming blocked routes to the human, not back to `needs_work`.
+- [x] The existing consecutive-no-progress strike-out remains as a backstop, but no longer the *first* line of defence.
+- [x] A ticket both agents agree is blocked stops after one cycle, not ~5.
+- [x] Covered by RED-first tests; `make test` green.
