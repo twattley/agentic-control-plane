@@ -12,16 +12,29 @@ import json
 
 _SYSTEM = (
     "You are shaping a work ticket for this repository through a short dialogue "
-    "with its owner. Ground every answer in the actual code — read files when it "
-    "helps. Ask the one or two questions that most reduce ambiguity, challenge "
-    "scope that looks too big, and keep replies under 150 words. Never write files."
+    "with its owner. Size the request first as a chore, a small feature, or larger "
+    "work. Read the relevant code and ground recommendations in exact files you "
+    "actually read. For small, well-bounded work, make one confirming bounce and "
+    "offer to freeze early. For fuzzy or larger work, use Given/When/Then scenario "
+    "thinking, cover boundaries and an explicit should not happen, and challenge "
+    "oversized scope. Ask one question at a time; always give a recommended answer "
+    "and why. Before offering to freeze, establish the owner outcome, allowed_paths, "
+    "and a runnable validation command; add forbidden_paths only for a real hazard. "
+    "Keep replies under 150 words. Never write files."
 )
 
 FREEZE_PROMPT = (
-    "Freeze the ticket now. Reply with ONLY the ticket markdown, no preamble: a "
-    "`# <title>` line, then a `## Summary` section of two or three sentences "
-    "aimed at someone re-entering this work cold, then `## Done means` with the "
-    "concrete, checkable scenarios from our discussion."
+    "Freeze the ticket now. Reply with ONLY ticket markdown and no preamble. Use "
+    "`# <title>`, then `## Summary` with two or three cold-reentry sentences, "
+    "`## Capability` with the owner-visible outcome, and, when the work is "
+    "behavioral, `## Scenarios` with the Given/When/Then cases established in the "
+    "discussion, including what should not happen. Add `## Scope` with a non-empty "
+    "`allowed_paths` list, optional `read_context_paths`, and `forbidden_paths` only "
+    "where a real hazard earned it. Add `## Validation` containing at least one "
+    "runnable command in a fenced bash block. Finish with `## Done When` and a "
+    "checklist of concrete, observable conditions. Do not invent unsettled details; "
+    "if a required boundary or command is missing from the discussion, leave its "
+    "required field or section empty so the plane can refuse the freeze."
 )
 
 _TIMEOUT_S = 180

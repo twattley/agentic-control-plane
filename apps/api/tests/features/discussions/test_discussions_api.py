@@ -6,7 +6,13 @@ import pytest
 from app.services import discussion_agent
 from tests.conftest import AUTH
 
-TICKET_MD = "# Add exports\n\n## Summary\n\nCSV export of runs.\n\n## Done means\n\n- [ ] works\n"
+TICKET_MD = (
+    "# Add exports\n\n## Summary\n\nCSV export of runs.\n\n"
+    "## Capability\n\nAn owner can export runs as CSV.\n\n"
+    "## Scope\n\n- `allowed_paths`:\n  - `app/**`\n\n"
+    "## Validation\n\n```bash\nmake test\n```\n\n"
+    "## Done When\n\n- [ ] Exported runs are valid CSV.\n"
+)
 
 
 @pytest.fixture
@@ -109,6 +115,73 @@ async def test_freeze_conflict_on_existing_ticket_stays_open(db, client, tmp_pat
     assert disc["state"] == "open"  # pick another slug and freeze again
 
 
+async def test_freeze_without_allowed_paths_writes_nothing_and_stays_open(
+    db, client, tmp_path, monkeypatch
+):
+    async def fake_reply(repo_path, message, session_id):
+        if message == discussion_agent.FREEZE_PROMPT:
+            return "sess-1", (
+                "# Add exports\n\n## Summary\n\nCSV export of runs.\n\n"
+                "## Scope\n\n- `allowed_paths`:\n\n"
+                "## Validation\n\n```bash\nmake test\n```\n"
+            )
+        return "sess-1", f"echo: {message}"
+
+    monkeypatch.setattr(discussion_agent, "reply", fake_reply)
+    repo_id = await _repo(client, tmp_path)
+    disc_id = (await client.post(
+        f"/api/v1/repos/{repo_id}/discussions",
+        json={"message": "hi"}, headers=AUTH,
+    )).json()["discussion"]["id"]
+
+    resp = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions/{disc_id}/freeze",
+        json={"slug": "T-7"}, headers=AUTH,
+    )
+
+    assert resp.status_code == 422
+    assert "allowed_paths" in resp.json()["detail"]
+    assert not (tmp_path / "tickets" / "T-7.md").exists()
+    continued = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions/{disc_id}/messages",
+        json={"message": "scope it to the exporter"}, headers=AUTH,
+    )
+    assert continued.status_code == 200
+
+
+async def test_freeze_with_empty_validation_writes_nothing_and_stays_open(
+    db, client, tmp_path, monkeypatch
+):
+    async def fake_reply(repo_path, message, session_id):
+        if message == discussion_agent.FREEZE_PROMPT:
+            return "sess-1", (
+                "# Add exports\n\n## Summary\n\nCSV export of runs.\n\n"
+                "## Scope\n\n- `allowed_paths`:\n  - `app/**`\n\n## Validation\n"
+            )
+        return "sess-1", f"echo: {message}"
+
+    monkeypatch.setattr(discussion_agent, "reply", fake_reply)
+    repo_id = await _repo(client, tmp_path)
+    disc_id = (await client.post(
+        f"/api/v1/repos/{repo_id}/discussions",
+        json={"message": "hi"}, headers=AUTH,
+    )).json()["discussion"]["id"]
+
+    resp = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions/{disc_id}/freeze",
+        json={"slug": "T-7"}, headers=AUTH,
+    )
+
+    assert resp.status_code == 422
+    assert "Validation" in resp.json()["detail"]
+    assert not (tmp_path / "tickets" / "T-7.md").exists()
+    continued = await client.post(
+        f"/api/v1/repos/{repo_id}/discussions/{disc_id}/messages",
+        json={"message": "use make test"}, headers=AUTH,
+    )
+    assert continued.status_code == 200
+
+
 async def test_frozen_discussion_refuses_more_messages(db, client, tmp_path, agent_calls):
     repo_id = await _repo(client, tmp_path)
     disc_id = (await client.post(
@@ -150,3 +223,41 @@ async def test_discussions_require_token(db, client, tmp_path):
     repo_id = await _repo(client, tmp_path)
     resp = await client.post(f"/api/v1/repos/{repo_id}/discussions", json={"message": "hi"})
     assert resp.status_code == 401
+
+
+def test_shaping_prompts_pin_sizing_depth_and_ticket_contract():
+    system = discussion_agent._SYSTEM
+    assert "Size the request first" in system
+    assert "one question at a time" in system
+    assert "recommended answer" in system
+    assert "Given/When/Then" in system
+    assert "should not happen" in system
+
+    for section_name in ("Summary", "Capability", "Scope", "Validation", "Done When"):
+        assert f"## {section_name}" in discussion_agent.FREEZE_PROMPT
+    assert "allowed_paths" in discussion_agent.FREEZE_PROMPT
+    assert "forbidden_paths" in discussion_agent.FREEZE_PROMPT
+
+
+async def test_shaping_agent_subprocess_remains_read_only(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b'{"session_id":"sess-2","result":"ready"}', b""
+
+    async def fake_subprocess(*cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(discussion_agent.asyncio, "create_subprocess_exec", fake_subprocess)
+
+    result = await discussion_agent.reply(str(tmp_path), "shape this", None)
+
+    assert result == ("sess-2", "ready")
+    cmd, kwargs = calls[0]
+    assert "--permission-mode" not in cmd
+    assert cmd[cmd.index("--append-system-prompt") + 1] == discussion_agent._SYSTEM
+    assert kwargs["cwd"] == str(tmp_path)

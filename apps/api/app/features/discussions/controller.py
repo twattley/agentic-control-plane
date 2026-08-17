@@ -20,6 +20,7 @@ from app.features.workflow import repository as workflow_repo
 from app.features.workflow.models import StoryCreateIn
 from app.services import discussion_agent
 from app.services.discussion_agent import AgentError
+from app.services.markdown import section
 
 router = APIRouter(
     prefix="/api/v1/repos/{repo_id}/discussions",
@@ -115,6 +116,7 @@ async def freeze_discussion(repo_id: int, discussion_id: int, data: FreezeIn) ->
     disc = await _open_discussion_or_error(discussion_id, repo_id)
     detail = await _turn(repo, disc, discussion_agent.FREEZE_PROMPT)
     content = discussion_agent.strip_fence(detail.messages[-1].content)
+    _require_freeze_contract(content)
 
     if data.epic_id is not None or data.standalone:
         ticket = _freeze_story(repo, data, content)
@@ -127,6 +129,42 @@ async def freeze_discussion(repo_id: int, discussion_id: int, data: FreezeIn) ->
             ) from None
     await repository.set_frozen(await get_pool(), discussion_id, ticket.slug)
     return ticket
+
+
+def _require_freeze_contract(content: str) -> None:
+    scope = section(content, "Scope")
+    missing = []
+    if scope is None or not _has_allowed_paths(scope):
+        missing.append("Scope/allowed_paths")
+    if section(content, "Validation") is None:
+        missing.append("Validation")
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"frozen ticket is missing required contract sections: {', '.join(missing)}",
+        )
+
+
+def _has_allowed_paths(scope: str) -> bool:
+    """The allowed_paths field must contain at least one nested list item."""
+    lines = scope.splitlines()
+    for index, raw in enumerate(lines):
+        stripped = raw.strip()
+        field = stripped.removeprefix("-").strip().removesuffix(":").strip("` ")
+        if not stripped.endswith(":") or field != "allowed_paths":
+            continue
+
+        field_indent = len(raw) - len(raw.lstrip())
+        for candidate in lines[index + 1:]:
+            if not candidate.strip():
+                continue
+            indent = len(candidate) - len(candidate.lstrip())
+            if indent <= field_indent:
+                return False
+            if candidate.strip().startswith("-") and candidate.strip()[1:].strip("` "):
+                return True
+        return False
+    return False
 
 
 def _freeze_story(repo: Repo, data: FreezeIn, content: str) -> TicketDetail:

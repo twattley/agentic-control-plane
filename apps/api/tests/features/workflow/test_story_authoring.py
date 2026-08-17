@@ -66,6 +66,14 @@ STANDALONE_CREATED_JSON = json.dumps({
     },
 })
 
+SHAPED_TICKET = (
+    "# Do a thing\n\n## Summary\n\nA shaped outcome.\n\n"
+    "## Capability\n\nShaped outcome.\n\n"
+    "## Scope\n\n- `allowed_paths`:\n  - `app/**`\n\n"
+    "## Validation\n\n```bash\nmake test\n```\n\n"
+    "## Done When\n\n- [ ] The shaped outcome is observable.\n"
+)
+
 
 def _install_tool(repo, create_exit: int = 0) -> None:
     """A fake agent_workflow speaking the real create-story contract, including
@@ -348,7 +356,7 @@ async def test_freeze_into_a_story(db, client, tmp_path, monkeypatch):
 
     async def fake_reply(repo_path, message, session_id):
         if message == discussion_agent.FREEZE_PROMPT:
-            return "sess-1", "# Do a thing\n\n## Story\n\nShaped outcome.\n"
+            return "sess-1", SHAPED_TICKET
         return "sess-1", "echo"
 
     monkeypatch.setattr(discussion_agent, "reply", fake_reply)
@@ -381,7 +389,7 @@ async def _frozen_discussion(client, repo_id, monkeypatch) -> int:
 
     async def fake_reply(repo_path, message, session_id):
         if message == discussion_agent.FREEZE_PROMPT:
-            return "sess-1", "# Do a thing\n\n## Story\n\nShaped outcome.\n"
+            return "sess-1", SHAPED_TICKET
         return "sess-1", "echo"
 
     monkeypatch.setattr(discussion_agent, "reply", fake_reply)
