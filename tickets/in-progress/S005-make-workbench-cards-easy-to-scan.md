@@ -10,12 +10,12 @@
 ## Status
 
 - State: in-progress
-- Phase: red
+- Phase: review-loop
 - Started: 2026-08-17 20:14:12 BST
 - Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-17 20:14:12 BST - direct small-behavior pass started from accepted cases
-- Next: implement the four workbench card cases
+- Last: 2026-08-17 20:15:43 BST - compact card layout built; web typecheck and production build green
+- Next: owner visually checks the live workbench at http://localhost:5400
 
 ## Story
 
@@ -57,8 +57,8 @@ cd apps/web && npx tsc -b --noEmit && npm run build
 
 ## Done When
 
-- [ ] Epic and standalone story numbers use the agreed compact presentation.
-- [ ] Long titles wrap without truncation.
-- [ ] Ticket summaries no longer render in workbench cards.
-- [ ] The footer contains only the state pill and a humanized latest-event age when available.
-- [ ] Web typecheck and production build pass.
+- [x] Epic and standalone story numbers use the agreed compact presentation.
+- [x] Long titles wrap without truncation.
+- [x] Ticket summaries no longer render in workbench cards.
+- [x] The footer contains only the state pill and a humanized latest-event age when available.
+- [x] Web typecheck and production build pass.

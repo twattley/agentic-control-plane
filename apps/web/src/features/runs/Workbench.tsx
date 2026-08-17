@@ -5,35 +5,42 @@ import { StateBadge } from './StateBadge'
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  if (s < 60) return 'now'
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return `${Math.floor(s / 86400)}d`
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
 }
 
 function eventLine(pane: BoardPane): string | null {
   const e = pane.last_event
   if (!e) return null
-  return `${e.type.split('_').join(' ')} · ${timeAgo(e.created_at)}`
+  return `${e.type.split('_').join(' ')} ${timeAgo(e.created_at)}`
+}
+
+function workNumber(ticketId: string): string {
+  return ticketId.replace(/^(E\d+)-(S\d+)$/, '$1 · $2')
 }
 
 function Pane({ pane }: { pane: BoardPane }) {
   const needsYou = pane.run.state === 'awaiting_human'
+  const latestEvent = eventLine(pane)
   return (
     <Link to={`/runs/${pane.run.id}`}
       className={`block rounded-lg border bg-white px-4 py-3 active:bg-slate-50 ${
         needsYou ? 'border-amber-400 ring-1 ring-amber-200' : 'border-slate-200'
       }`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="truncate font-medium text-slate-900">
-          {pane.run.ticket_id} · {pane.run.title}
-        </div>
-        <StateBadge state={pane.run.state} />
+      <div className="text-xs font-semibold text-slate-400">
+        {workNumber(pane.run.ticket_id)}
       </div>
-      {pane.summary && (
-        <p className="mt-1 text-sm leading-snug text-slate-600 line-clamp-3">{pane.summary}</p>
-      )}
-      <div className="mt-1.5 text-xs text-slate-400">{eventLine(pane)}</div>
+      <div className="mt-0.5 font-medium leading-snug text-slate-900">
+        {pane.run.title}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <StateBadge state={pane.run.state} />
+        {latestEvent && (
+          <span className="text-right text-xs text-slate-400">{latestEvent}</span>
+        )}
+      </div>
     </Link>
   )
 }
