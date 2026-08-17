@@ -9,13 +9,13 @@
 
 ## Status
 
-- State: backlog
-- Phase: shape
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: found dogfooding football run 6 (E001-S06); a forbidden-path change carrying a live secret was staged at awaiting_human
-- Next: prioritise, then RED-first the boundary guard at stage/commit time
+- State: complete
+- Phase: done
+- Started: 2026-08-17 18:27:39 BST
+- Updated: 2026-08-17 18:50
+- Completed: 2026-08-17 18:50
+- Last: close-ticket verified reviewer run 53c4c7266d54b69c and close gate passed
+- Next: closed
 
 ## Story
 
@@ -69,7 +69,7 @@ And the human must not have to notice it manually to prevent the leak.
 
 - `allowed_paths`:
   - apps/api/app/worker.py
-  - apps/api/tests/features/runs/
+  - apps/api/tests/features/runs/**
 - `read_context_paths`:
   - apps/api/app/services/executor.py
   - ARCHITECTURE.md
@@ -91,7 +91,7 @@ that incidental out-of-`allowed_paths` changes are left uncommitted.
 
 ## Done When
 
-- [ ] The closer stages/commits only paths inside the ticket's `allowed_paths`.
-- [ ] A change touching a `forbidden_paths` file fails the close with a clear, path-naming error and commits nothing.
-- [ ] Enforcement is structural (at stage/commit time), independent of any reviewer's prose claims.
-- [ ] Covered by RED-first tests; `make test` green.
+- [x] The closer stages/commits only paths inside the ticket's `allowed_paths`.
+- [x] A change touching a `forbidden_paths` file fails the close with a clear, path-naming error and commits nothing.
+- [x] Enforcement is structural (at stage/commit time), independent of any reviewer's prose claims.
+- [x] Covered by RED-first tests; `make test` green.

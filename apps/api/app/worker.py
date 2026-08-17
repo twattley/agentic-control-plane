@@ -81,6 +81,15 @@ def _agent_command(role: str, provider: str, task: str, repo_path: str) -> list[
 ARTIFACT_DIR = ".agent-artifacts"
 
 
+class _TicketBoundaryError(Exception):
+    """A scoped close found work it must refuse rather than commit."""
+
+
+class _TicketScopePlan(NamedTuple):
+    allowed_paths: tuple[str, ...]
+    ticket_paths: tuple[str, ...]
+
+
 def _capture_evidence(repo_path: str, run_id: int) -> str | None:
     """Take the builder's optional markdown evidence out of the checkout.
 
@@ -472,9 +481,33 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
     if repo is None:
         return "skipped"
 
+    try:
+        scope_plan = _close_scope_plan(repo.path, detail.run.ticket_id)
+    except (
+        _TicketBoundaryError,
+        workflow_repo.WorkflowReadError,
+        workflow_repo.WorkflowDocumentError,
+        subprocess.SubprocessError,
+        OSError,
+        UnicodeDecodeError,
+    ) as error:
+        summary = str(error)
+        if not isinstance(error, _TicketBoundaryError):
+            summary = f"ticket boundary could not be verified: {summary}"
+        return await _post_gate(
+            pool,
+            run_id,
+            "gate_failed",
+            repo.close_gate_command,
+            summary,
+            failure_kind="ticket_boundary",
+        )
+
     closer = Path(repo.path) / "scripts" / "close_ticket"
     if closer.is_file():
-        return await _close_with_repo_closer(pool, run_id, detail, repo, closer)
+        return await _close_with_repo_closer(
+            pool, run_id, detail, repo, closer, scope_plan
+        )
 
     if repo.close_gate_command:
         try:
@@ -495,11 +528,131 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
                 or "gate command failed",
             )
 
-    return await _commit_and_close(pool, run_id, detail, repo, closed_by=None)
+    return await _commit_and_close(
+        pool, run_id, detail, repo, closed_by=None, scope_plan=scope_plan
+    )
+
+
+def _changed_paths(repo_path: str) -> tuple[str, ...]:
+    """Return every tracked or untracked worktree path relative to the repo."""
+    tracked = subprocess.run(
+        ["git", "-C", repo_path, "diff", "--name-only", "HEAD"],
+        cwd=repo_path, capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    untracked = subprocess.run(
+        ["git", "-C", repo_path, "ls-files", "--others", "--exclude-standard"],
+        cwd=repo_path, capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    return tuple(sorted(set(tracked + untracked)))
+
+
+def _close_scope_plan(repo_path: str, ticket_id: str) -> _TicketScopePlan | None:
+    """Classify close candidates through the repo's canonical scope checker.
+
+    A declared v1 write boundary is enforceable. Forbidden work refuses the
+    close; merely incidental out-of-scope work stays in the checkout. Legacy
+    and historical unscoped stories retain stage-all behavior until shaped
+    with a real allowlist.
+    """
+    workflow = workflow_repo.load_workflow(repo_path)
+    if workflow.ticket_contract != "epic-story-v1":
+        return None
+
+    document = workflow_repo.document_from_workflow(repo_path, workflow, ticket_id)
+    if not _has_declared_allowed_paths(document.content):
+        return None
+    checker = Path(repo_path) / "scripts" / "check_ticket_scope"
+    if not checker.is_file():
+        raise _TicketBoundaryError(
+            "ticket boundary could not be verified: scripts/check_ticket_scope is missing"
+        )
+
+    allowed: list[str] = []
+    forbidden: list[str] = []
+    ticket_paths: list[str] = [document.path]
+    for path in _changed_paths(repo_path):
+        if path == ARTIFACT_DIR or path.startswith(f"{ARTIFACT_DIR}/"):
+            continue
+        if _is_ticket_lane_alias(path, document.path):
+            ticket_paths.append(path)
+            continue
+        result = subprocess.run(
+            [str(checker), document.path, "--file", path],
+            cwd=repo_path, capture_output=True, text=True,
+            timeout=_TIMEOUT_S, check=False,
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode == 0:
+            allowed.append(path)
+        elif any(line.startswith(f"FORBIDDEN {path}") for line in output.splitlines()):
+            forbidden.append(path)
+        elif any(line.startswith(f"OUT-OF-SCOPE {path}") for line in output.splitlines()):
+            continue
+        else:
+            raise _TicketBoundaryError(
+                "ticket boundary could not be verified"
+                + (f": {_clip(output, 300)}" if output else "")
+            )
+
+    if forbidden:
+        subprocess.run(
+            ["git", "-C", repo_path, "reset", "--quiet", "--", *forbidden],
+            cwd=repo_path, check=False,
+        )
+        paths = ", ".join(forbidden)
+        raise _TicketBoundaryError(f"forbidden ticket path(s): {paths}")
+
+    return _TicketScopePlan(
+        tuple(allowed), tuple(dict.fromkeys(ticket_paths))
+    )
+
+
+def _has_declared_allowed_paths(content: str) -> bool:
+    """Distinguish a real allowlist from old/missing or placeholder scope."""
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(r"^-\s+`?allowed_paths`?\s*:\s*(.*)$", line)
+        if match is None:
+            continue
+        inline = match.group(1).strip().strip("`")
+        if inline and inline != "none":
+            return True
+        for candidate in lines[index + 1:]:
+            if candidate.startswith("## ") or (
+                candidate.startswith("- ") and ":" in candidate
+            ):
+                break
+            value = re.sub(r"^\s*-\s*", "", candidate).strip().strip("`")
+            if value and value != "none":
+                return True
+        return False
+    return False
+
+
+def _is_ticket_lane_alias(path: str, current_path: str) -> bool:
+    """A lifecycle move may leave the same ticket changed in two lanes."""
+    path_parts = path.split("/")
+    current_parts = current_path.split("/")
+    lifecycle_lanes = {
+        "backlog", "ready", "in-progress", "blocked", "done", "complete"
+    }
+    return (
+        len(path_parts) >= 3
+        and len(current_parts) >= 3
+        and path_parts[0] == current_parts[0] == "tickets"
+        and path_parts[1] in lifecycle_lanes
+        and current_parts[1] in lifecycle_lanes
+        and path_parts[2:] == current_parts[2:]
+    )
 
 
 async def _close_with_repo_closer(
-    pool: asyncpg.Pool, run_id: int, detail, repo, closer: Path
+    pool: asyncpg.Pool,
+    run_id: int,
+    detail,
+    repo,
+    closer: Path,
+    scope_plan: _TicketScopePlan | None,
 ) -> str:
     """Delegate stamp, lane move, and history sweep to the repo's own closer —
     one implementation of the ticket lifecycle, in the portable kit. The plane
@@ -542,17 +695,49 @@ async def _close_with_repo_closer(
             reason,
             failure_kind=_close_refusal_kind(detail.events),
         )
-    return await _commit_and_close(pool, run_id, detail, repo, closed_by=closer.name)
+    return await _commit_and_close(
+        pool,
+        run_id,
+        detail,
+        repo,
+        closed_by=closer.name,
+        scope_plan=scope_plan,
+    )
 
 
 async def _commit_and_close(
-    pool: asyncpg.Pool, run_id: int, detail, repo, closed_by: str | None
+    pool: asyncpg.Pool,
+    run_id: int,
+    detail,
+    repo,
+    closed_by: str | None,
+    scope_plan: _TicketScopePlan | None,
 ) -> str:
-    _stage_all(repo.path)
+    commit_paths: tuple[str, ...] | None = None
+    if scope_plan is None:
+        _stage_all(repo.path)
+    else:
+        current_document = workflow_repo.get_document(
+            repo.path, detail.run.ticket_id
+        )
+        commit_paths = tuple(dict.fromkeys((
+            *scope_plan.allowed_paths,
+            *scope_plan.ticket_paths,
+            current_document.path,
+        )))
+        subprocess.run(
+            ["git", "-C", repo.path, "add", "-A", "--", *commit_paths],
+            cwd=repo.path, check=True,
+        )
+    commit_command = [
+        "git", "-C", repo.path,
+        "-c", "user.email=agent@control-plane", "-c", "user.name=agentic-control-plane",
+        "commit", "-m", f"{detail.run.ticket_id}: {detail.run.title}",
+    ]
+    if commit_paths is not None:
+        commit_command.extend(["--only", "--", *commit_paths])
     commit = subprocess.run(
-        ["git", "-C", repo.path,
-         "-c", "user.email=agent@control-plane", "-c", "user.name=agentic-control-plane",
-         "commit", "-m", f"{detail.run.ticket_id}: {detail.run.title}"],
+        commit_command,
         capture_output=True, text=True, check=False,
     )
     note = commit.stdout.strip()[:300] or commit.stderr.strip()[:300] or "committed"
