@@ -18,10 +18,11 @@ contract, and the inline duplicate is deleted.
 - Started: —
 - Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-17 - shaped with the owner from the two-lanes conversation;
-  kit half is ae-022, which must land and sync first.
-- Next: builder claims — after ae-022 is closed and `scripts/sync` has run,
-  and not while another ticket holds `apps/api/app/worker.py`.
+- Last: 2026-08-17 12:33 BST - dependency satisfied: ae-022 closed (kit
+  commit 80e72a2) and synced to both installed layers (~/.claude/skills and
+  ~/.agents/skills — the codex-visible path, useful when implementing).
+- Next: builder claims — once the worker lane (029/031/032/033) has drained
+  `apps/api/app/worker.py`; this ticket goes last by design.
 
 ## Why
 
