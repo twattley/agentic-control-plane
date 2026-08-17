@@ -69,6 +69,44 @@ function ReviewerFindings({ findings }: { findings: Event }) {
   )
 }
 
+// Which gate ran before the close commit, and how it went. An ungated close
+// reached `closed` without anything running — that must read as a warning,
+// never as a green tick. Only an explicit `gate_command: null` means ungated:
+// events from before the payload existed came from runs whose (then-global)
+// gate really ran, so a missing key must not accuse them of skipping it.
+function CloseGate({ event }: { event: Event }) {
+  const payload = event.payload as { gate_command?: string | null }
+  const failed = event.type === 'gate_failed'
+  const badge = failed
+    ? { label: '❌ gate failed', tone: 'text-red-700' }
+    : payload.gate_command === null
+      ? { label: '⚠ closed ungated — nothing was verified', tone: 'text-amber-700' }
+      : { label: '✅ gate passed', tone: 'text-green-700' }
+
+  return (
+    <Panel title="Close gate">
+      <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+        <span className={`mr-2 font-medium ${badge.tone}`}>{badge.label}</span>
+        {payload.gate_command && (
+          <code className="break-all text-slate-500">{payload.gate_command}</code>
+        )}
+        {!failed && payload.gate_command === undefined && (
+          <span className="text-xs text-slate-400">gate command not recorded</span>
+        )}
+        {failed && (
+          <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{payloadText(event)}</p>
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function timelineLabel(e: Event): string {
+  const { gate_command } = e.payload as { gate_command?: string | null }
+  if (e.type === 'gate_passed' && gate_command === null) return 'closed ungated'
+  return e.type.replace(/_/g, ' ')
+}
+
 function ActionBar({ data }: { data: RunDetailData }) {
   const id = data.run.id
   const decide = useDecide(id)
@@ -184,6 +222,8 @@ export function RunDetailPage() {
   const { run, events, artifacts } = data
   const brief = latest(events, 'builder_brief_posted')
   const findings = latest(events, 'reviewer_findings_posted')
+  const gate = [...events].reverse()
+    .find((e) => e.type === 'gate_passed' || e.type === 'gate_failed')
   const diff = latestArtifact(artifacts, 'diff')
   const evidence = latestArtifact(artifacts, 'evidence')
 
@@ -201,6 +241,8 @@ export function RunDetailPage() {
             {DISPATCHABLE.includes(run.state) && <ReRunButton id={run.id} />}
           </div>
         </header>
+
+        {gate && <CloseGate event={gate} />}
 
         {findings && <ReviewerFindings findings={findings} />}
 
@@ -231,7 +273,7 @@ export function RunDetailPage() {
             {events.map((e) => (
               <li key={e.id} className="flex gap-2 text-slate-600">
                 <span className="text-slate-400">{e.actor}</span>
-                <span className="font-medium">{e.type.replace(/_/g, ' ')}</span>
+                <span className="font-medium">{timelineLabel(e)}</span>
               </li>
             ))}
           </ol>

@@ -15,6 +15,7 @@ import {
   useRepo, useRepoRuns, useTicket, useTickets, useUpdateTicket, useWorkflow,
   useWorkflowDocumentByPath,
 } from '../../api/hooks'
+import { CloseGateCard } from './CloseGateCard'
 import { StateBadge } from '../runs/StateBadge'
 import { DiscussionPanel } from './DiscussionPanel'
 import { EpicSelect, STANDALONE, parentForApi } from './EpicSelect'
@@ -795,6 +796,8 @@ export function ProjectView() {
         <Link to="/" className="text-sm text-slate-400">← projects</Link>
         <h1 className="text-2xl font-bold text-slate-900">{repo?.name ?? '…'}</h1>
       </header>
+
+      {repo && <CloseGateCard repo={repo} />}
 
       {workflowError && <p className="text-sm text-red-600">{String(workflowError)}</p>}
       {workflow?.source === 'legacy-flat' && <TicketList repoId={repoId} runs={runs ?? []} />}

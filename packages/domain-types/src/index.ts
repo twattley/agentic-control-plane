@@ -26,9 +26,18 @@ export interface Repo {
   slug: string
   name: string
   path: string
+  /** The repo's own close-gate command, run in its checkout before the closer
+   * commits. null = ungated — allowed, and recorded on every run that closes
+   * that way. */
+  close_gate_command: string | null
   /** README first paragraph, derived at read time; null when there's no prose. */
   description: string | null
   created_at: string
+}
+
+/** Set or clear (null) a repo's close gate. Mirrors RepoGateIn. */
+export interface RepoGateInput {
+  close_gate_command: string | null
 }
 
 export type RunMode = 'direct' | 'tdd'

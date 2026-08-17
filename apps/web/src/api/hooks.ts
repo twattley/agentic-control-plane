@@ -9,6 +9,7 @@ import type {
   EventInput,
   QueueName,
   Repo,
+  RepoGateInput,
   Run,
   RunDetail,
   RunInput,
@@ -37,6 +38,19 @@ export function useRepos() {
 
 export function useRepo(id: number) {
   return useQuery({ queryKey: ['repo', id], queryFn: () => apiFetch<Repo>(`/repos/${id}`) })
+}
+
+export function useSetCloseGate(repoId: number) {
+  return useMutation({
+    mutationFn: (close_gate_command: string | null) => {
+      const body: RepoGateInput = { close_gate_command }
+      return apiPut<Repo>(`/repos/${repoId}/gate`, body)
+    },
+    onSuccess: (repo) => {
+      queryClient.setQueryData(['repo', repoId], repo)
+      queryClient.invalidateQueries({ queryKey: ['repos'] })
+    },
+  })
 }
 
 export function useBoard() {

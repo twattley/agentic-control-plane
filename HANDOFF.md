@@ -75,10 +75,11 @@ and 016 close the two-closers seam. acp-017 is done.
 
 ## Known traps
 
-- **The close gate is one global setting.** It is currently
-  `AGENTIC_CONTROL_PLANE_CLOSE_GATE_COMMAND=uv run pytest`, correct for
-  transcriber and wrong for every other repo. Change it by hand before a lap
-  elsewhere and restart the API. This is acp-015.
+- ~~**The close gate is one global setting.**~~ Fixed by acp-015 (2026-08-17):
+  the gate lives on each repo (`repos.close_gate_command`, set on the project
+  page or `PUT /api/v1/repos/{id}/gate`). The env var is gone. Repos registered
+  before the change carry no gate yet — set each one once in the UI, or it
+  closes visibly ungated.
 - **Agent messages are truncated to 500 characters** (`worker.py:140`). This
   ate a reviewer finding mid-word on transcriber run 3, and the builder could
   not act on an instruction it never received. Human notes are *not* truncated.

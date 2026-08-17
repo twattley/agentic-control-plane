@@ -98,8 +98,9 @@ make mobile   # Expo
 
 Useful `.env` switches: `AGENTIC_CONTROL_PLANE_DISPATCH_ENABLED=true` for the
 self-driving loop, `AGENTIC_CONTROL_PLANE_CLAUDE_PERMISSION_MODE=bypassPermissions`
-to let a Claude builder run tests unattended, `AGENTIC_CONTROL_PLANE_CLOSE_GATE_COMMAND`
-to gate closes on the repo's test suite.
+to let a Claude builder run tests unattended. The close gate is not a service
+setting: each repo carries its own gate command, set on its project page (or
+`PUT /api/v1/repos/{id}/gate`), and a repo without one closes visibly ungated.
 
 ## Testing
 

@@ -34,9 +34,8 @@ class Settings(BaseSettings):
     # where a fix's own regression got caught, and escalating before that put
     # work in front of a human that the pair would have settled themselves.
     max_review_rounds: int = 3
-    # Shell command the closer runs as the gate before committing (must exit 0).
-    # Default is a no-op; set to the repo's test command to gate on green tests.
-    close_gate_command: str = "true"
+    # The close gate is per-repo (repos.close_gate_command) — a service-wide
+    # command was correct for exactly one repo and wrong for all the others.
     # Root folder whose subdirectories are the registerable projects. The
     # register UI offers a dropdown of these — no free-text paths.
     projects_root: str = _DEFAULT_PROJECTS_ROOT

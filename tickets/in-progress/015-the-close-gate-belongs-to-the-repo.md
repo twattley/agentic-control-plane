@@ -12,14 +12,24 @@ The gate is a property of the repository. Store it there.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-16
+- State: in-progress
+- Phase: review done, awaiting human review
+- Started: 2026-08-17
+- Updated: 2026-08-17
 - Completed: —
-- Last: 2026-08-16 - shaped after setting a real gate for the S001 lap made
-  every other repo's close fail
-- Next: builder claims
+- Last: 2026-08-17 - built test-first by claude, reviewed by standards-reviewer
+  (nothing blocking; both settle-before-close findings fixed: stale doc
+  references to the removed env var, and pre-015 gate events misreading as
+  ungated). Scope widened, recorded below: `apps/web/src/api/hooks.ts` (the
+  mutation hook belongs with every other hook), `README.md` + `HANDOFF.md`
+  (both instructed setting the now-removed env var). Review notes accepted as
+  deliberate: discovery reads Makefile/package.json on each scan (negligible
+  for a personal projects folder); malformed package.json silently yields no
+  suggestion ("never invent" is the required outcome). Follow-ups ticketed:
+  018 (slow gate strands a run in closing), 019 (500-char truncation eats
+  reviewer instructions). Migration applied to dev DB; existing repos carry no
+  gate until set once in the UI.
+- Next: human review, then close + commit
 
 ## Why
 
@@ -70,6 +80,11 @@ nothing ran.
   - `apps/api/tests/features/repos/**`
   - `apps/api/tests/features/runs/**`
   - `apps/web/src/features/**`
+  - `apps/web/src/api/hooks.ts` (widened 2026-08-17: the edit surface's
+    mutation hook belongs with every other hook)
+  - `README.md` (widened 2026-08-17: documented the removed env var)
+  - `HANDOFF.md` (widened 2026-08-17: same — its known-trap entry told the
+    reader to set the setting this ticket deletes)
   - `packages/domain-types/src/index.ts`
 - `read_context_paths`:
   - `ARCHITECTURE.md`
@@ -88,12 +103,19 @@ cd apps/web && npx tsc -b --noEmit
 
 ## Done When
 
-- [ ] A repo carries its own close-gate command, set at registration and
-      editable later.
-- [ ] The closer runs the command belonging to the run's repo, in that repo.
-- [ ] A repo with no gate closes, and the run records that it was ungated —
-      discoverable in the run view, not inferred from silence.
-- [ ] `settings.close_gate_command` is gone, so no run can inherit a command
+- [x] A repo carries its own close-gate command, set at registration and
+      editable later. (`repos.close_gate_command`, suggestion from Makefile
+      `test:` target / npm `test` script at registration — never invented;
+      `PUT /repos/{id}/gate` + CloseGateCard to edit or clear.)
+- [x] The closer runs the command belonging to the run's repo, in that repo.
+- [x] A repo with no gate closes, and the run records that it was ungated —
+      discoverable in the run view, not inferred from silence. (`gate_passed`
+      payload carries `gate_command: null` + an "ungated" summary — the state
+      machine is forbidden here, so the fact rides the payload; run view shows
+      an amber "closed ungated — nothing was verified" panel and timeline
+      label.)
+- [x] `settings.close_gate_command` is gone, so no run can inherit a command
       from another repo.
-- [ ] Two repos with different gate commands both close correctly in the same
-      service without either being reconfigured.
+- [x] Two repos with different gate commands both close correctly in the same
+      service without either being reconfigured. (Pinned by
+      `test_two_repos_close_on_their_own_gates_in_one_service`.)

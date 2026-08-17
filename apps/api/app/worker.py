@@ -176,12 +176,18 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
 
 
 async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
-    """Run the close gate, then commit the run's changes in the repo checkout.
+    """Run the repo's own close gate in its checkout, then commit the run's
+    changes there.
 
+    The gate command belongs to the run's repo (`repos.close_gate_command`), so
+    two repos with different test commands close correctly in the same service.
     Gate green -> `gate_passed` (state closing -> closed). Gate red -> `gate_failed`
-    (back to needs_work for a fix). Commits locally; never pushes (that stays a
-    deliberate human/CI action). Safe to run twice: a second closer finds the run
-    already past `closing` and the transition raises -> skipped.
+    (back to needs_work for a fix). No gate -> the run still closes, and the
+    event says so out loud: which gate ran — or that none did — is a recorded
+    fact about the run, never a silent default. Commits locally; never pushes
+    (that stays a deliberate human/CI action). Safe to run twice: a second
+    closer finds the run already past `closing` and the transition raises ->
+    skipped.
     """
     detail = await runs_service.run_detail(pool, run_id)
     if detail.run.state != "closing":
@@ -190,15 +196,16 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
     if repo is None:
         return "skipped"
 
-    gate = subprocess.run(
-        ["bash", "-lc", settings.close_gate_command],
-        cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
-    )
-    if gate.returncode != 0:
-        return await _post_gate(
-            pool, run_id, "gate_failed",
-            (gate.stdout + gate.stderr).strip()[:500] or "gate command failed",
+    if repo.close_gate_command:
+        gate = subprocess.run(
+            ["bash", "-lc", repo.close_gate_command],
+            cwd=repo.path, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False,
         )
+        if gate.returncode != 0:
+            return await _post_gate(
+                pool, run_id, "gate_failed", repo.close_gate_command,
+                (gate.stdout + gate.stderr).strip()[:500] or "gate command failed",
+            )
 
     _stage_all(repo.path)
     commit = subprocess.run(
@@ -208,13 +215,19 @@ async def _close_pass(pool: asyncpg.Pool, run_id: int) -> str:
         capture_output=True, text=True, check=False,
     )
     note = commit.stdout.strip()[:300] or commit.stderr.strip()[:300] or "committed"
-    return await _post_gate(pool, run_id, "gate_passed", note)
+    if not repo.close_gate_command:
+        note = f"ungated close — no close gate configured; nothing was verified. {note}"
+    return await _post_gate(pool, run_id, "gate_passed", repo.close_gate_command or None, note)
 
 
-async def _post_gate(pool: asyncpg.Pool, run_id: int, event_type: str, summary: str) -> str:
+async def _post_gate(
+    pool: asyncpg.Pool, run_id: int, event_type: str, gate_command: str | None, summary: str
+) -> str:
     try:
         await runs_service.record_event(
-            pool, run_id, EventIn(type=event_type, actor="system", payload={"summary": summary})
+            pool, run_id,
+            EventIn(type=event_type, actor="system",
+                    payload={"gate_command": gate_command, "summary": summary}),
         )
     except IllegalTransitionError:
         return "skipped"  # another closer already moved it
