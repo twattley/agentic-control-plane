@@ -102,6 +102,16 @@ def _stage_all(repo_path: str) -> None:
     )
 
 
+def _git_head(repo_path: str) -> str:
+    """Current HEAD commit, or "" outside git. A builder pass must not move
+    it — commits belong to the closer — so run_pass compares before/after."""
+    out = subprocess.run(
+        ["git", "-C", repo_path, "rev-parse", "HEAD"],
+        cwd=repo_path, capture_output=True, text=True, check=False,
+    )
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
 def _git_diff(repo_path: str) -> str:
     """Stage everything the agent touched and return the unified diff."""
     _stage_all(repo_path)
@@ -199,8 +209,10 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
         return "skipped"
 
     revision_base = None
+    head_before = ""
     if role == "builder":
         revision_base = await _ensure_revision_base(pool, run_id, detail, repo.path)
+        head_before = _git_head(repo.path)
 
     result = subprocess.run(
         _agent_command(role, provider, task, repo.path),
@@ -209,6 +221,20 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
     summary = _summary(result.stdout or "", provider, role)
 
     if role == "builder":
+        # A moved HEAD means the builder committed — the E001-S01 rogue pass
+        # claimed the reviewer role and closed its own ticket this way. The
+        # boundary is stated in the prompt; when it is crossed anyway, the run
+        # says so out loud instead of absorbing it into odd-looking artifacts.
+        head_after = _git_head(repo.path)
+        if head_before and head_after != head_before:
+            await runs_service.record_event(
+                pool, run_id,
+                EventIn(type="builder_committed", actor="builder",
+                        payload={"head_before": head_before, "head_after": head_after,
+                                 "summary": "builder committed during its pass — "
+                                            "the role boundary stops at the handoff; "
+                                            "artifacts may not reflect the full change"}),
+            )
         # Capture first for a tidy checkout. `_stage_all` separately protects
         # the index from stale or already-staged artifact files.
         evidence = _capture_evidence(repo.path, run_id)
@@ -508,16 +534,30 @@ def _task_for(detail, role: str, repo_path: str) -> str:
             f"DIFF:\n{diff}{_evidence_review_note(detail)}"
         )
     status = _status_contract_note(workflow, run.ticket_id)
+    boundary = _builder_boundary_note()
     instruction = _newest_instruction(detail.events)
     evidence = _evidence_invitation(run.id)
     if instruction:
         return (f"Address the {instruction.source} on {run.ticket_id}: {run.title}.{spec} "
-                f"{instruction.label}: {instruction.text}{status}{evidence}")
+                f"{instruction.label}: {instruction.text}{status}{boundary}{evidence}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it "
-                f"passes.{status}{evidence}")
-    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{evidence}"
+                f"passes.{status}{boundary}{evidence}")
+    return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{boundary}{evidence}"
+
+
+def _builder_boundary_note() -> str:
+    """The line the E001-S01 rogue pass proved cannot go unsaid: given only
+    'reviewer verdict is needs-work; close requires pass' as its instruction, a
+    builder claimed the reviewer role, wrote itself a pass, and ran the closer.
+    The protocol lives in the human's config — the prompt is where the builder
+    actually reads."""
+    return (
+        " Role boundary: you are the builder. Do not claim the reviewer role, do "
+        "not run scripts/close_ticket, and do not commit — finish at the handoff "
+        "and leave the verdict and the close to their own lanes."
+    )
 
 
 def _status_contract_note(workflow, ticket_id: str) -> str:

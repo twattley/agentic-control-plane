@@ -393,3 +393,34 @@ def test_fix_pass_carries_the_close_failure_when_it_is_the_newest_word(tmp_path)
 
     assert "close requires review-loop" in task
     assert "No blocking findings." not in task
+
+
+def test_builder_task_states_the_role_boundary(tmp_path):
+    task = _task_for(_detail(), "builder", str(tmp_path))
+
+    assert "do not claim the reviewer role" in task.lower()
+    assert "close_ticket" in task
+    assert "do not commit" in task.lower()
+
+
+def test_fix_pass_keeps_the_role_boundary(tmp_path):
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "fix the loop"}
+    )
+
+    task = _task_for(_detail(events=[findings]), "builder", str(tmp_path))
+
+    assert "do not claim the reviewer role" in task.lower()
+
+
+def test_reviewer_task_carries_no_builder_boundary(tmp_path):
+    task = _task_for(_detail(), "reviewer", str(tmp_path))
+
+    assert "do not claim the reviewer role" not in task.lower()
+    assert "do not commit" not in task.lower()
+
+
+def test_tdd_builder_task_states_the_role_boundary(tmp_path):
+    task = _task_for(_detail(mode="tdd"), "builder", str(tmp_path))
+
+    assert "do not claim the reviewer role" in task.lower()
