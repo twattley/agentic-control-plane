@@ -629,6 +629,7 @@ class _Instruction(NamedTuple):
     source: str
     label: str
     text: str
+    from_human: bool = False
 
 
 #: Where a fix round's instruction comes from, by event type. A human who
@@ -640,9 +641,9 @@ class _Instruction(NamedTuple):
 #: without this entry the builder is re-prompted with stale reviewer findings
 #: and never told the gate or the repo's closer refused.
 _INSTRUCTION_SOURCES = {
-    "human_note_posted": ("note", "human review", "Requested changes"),
-    "reviewer_findings_posted": ("summary", "reviewer findings", "Findings"),
-    "gate_failed": ("summary", "close failure", "The close failed with"),
+    "human_note_posted": ("note", "human review", "Requested changes", True),
+    "reviewer_findings_posted": ("summary", "reviewer findings", "Findings", False),
+    "gate_failed": ("summary", "close failure", "The close failed with", False),
 }
 
 
@@ -657,7 +658,7 @@ def _newest_instruction(events) -> _Instruction | None:
         entry = _INSTRUCTION_SOURCES.get(event.type)
         if entry is None:
             continue
-        key, source, label = entry
+        key, source, label, from_human = entry
         text = (event.payload or {}).get(key)
         if text and text.strip():
             if (
@@ -675,7 +676,7 @@ def _newest_instruction(events) -> _Instruction | None:
                 )
                 if findings:
                     text = f"{text.strip()} Reviewer findings: {findings}"
-            return _Instruction(source, label, text.strip())
+            return _Instruction(source, label, text.strip(), from_human)
     return None
 
 
@@ -711,13 +712,31 @@ def _task_for(detail, role: str, repo_path: str) -> str:
     instruction = _newest_instruction(detail.events)
     evidence = _evidence_invitation(run.id)
     if instruction:
+        convention = _convention_note() if instruction.from_human else ""
         return (f"Address the {instruction.source} on {run.ticket_id}: {run.title}.{spec} "
-                f"{instruction.label}: {instruction.text}{status}{boundary}{evidence}")
+                f"{instruction.label}: {instruction.text}{status}{boundary}{convention}{evidence}")
     if run.mode == "tdd":
         return (f"Implement {run.ticket_id}: {run.title}.{spec} Work test-first: write a "
                 "failing test that captures the behaviour, then implement until it "
                 f"passes.{status}{boundary}{evidence}")
     return f"Implement {run.ticket_id}: {run.title}.{spec}{status}{boundary}{evidence}"
+
+
+def _convention_note() -> str:
+    """acp-032: on the S001 lap a convention written into the repo's guidance
+    outperformed the feedback channel — the document fixes every later ticket,
+    the note fixes one. A human mid-review is the person least likely to stop
+    and write documentation, so the fix round is asked to. Human notes only:
+    a reviewer enforcing a documented standard is not evidence of a missing
+    one."""
+    return (
+        " If the requested change is about shape, structure, naming, or house "
+        "style rather than a defect, also record the rule in this repository's "
+        "own guidance — whatever location and format it already uses for "
+        "conventions — as part of the fix, and say so in your summary. If the "
+        "rule is already documented, or the change fixes a defect, write no "
+        "guidance."
+    )
 
 
 def _builder_boundary_note() -> str:

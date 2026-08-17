@@ -13,15 +13,16 @@ rule in the repository's own guidance. One correction, then the standard exists
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-16
-- Completed: —
-- Last: 2026-08-17 - renumbered from 013 into the sequential queue; dead
-  read-context reference to retired ticket 012 dropped (its reviewer-side
-  half landed as acp-020).
-- Next: builder claims
+- State: complete
+- Phase: done
+- Started: 2026-08-17
+- Updated: 2026-08-17 13:04
+- Completed: 2026-08-17 13:04
+- Last: close-ticket verified reviewer run e235eace18224cbe and close gate passed
+  independent review standards-reviewer), verdict pass on round 2; round 1
+  warnings fixed: from_human flag replaces display-string discriminator,
+  convention note grouped with plane-authored instructions.
+- Next: closed
 
 ## Why
 

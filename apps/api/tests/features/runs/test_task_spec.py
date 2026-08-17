@@ -66,6 +66,38 @@ def test_fix_pass_keeps_spec_pointer(tmp_path):
     assert "tickets/SBX-3.md" in task
 
 
+def test_human_note_fix_pass_invites_convention_capture(tmp_path):
+    """acp-032: a style objection from the human should also get written into
+    the repo's own guidance — one anchor per contract clause."""
+    note = SimpleNamespace(type="human_note_posted", payload={"note": "wrong idiom"})
+
+    task = _task_for(_detail(events=[note]), "builder", str(tmp_path))
+
+    assert "wrong idiom" in task
+    assert "house style" in task  # the judgment: convention vs defect
+    assert "own guidance" in task  # the repo's location, never ours
+    assert "already documented" in task  # writing nothing is permitted
+
+
+def test_reviewer_findings_fix_pass_has_no_convention_capture(tmp_path):
+    findings = SimpleNamespace(
+        type="reviewer_findings_posted", payload={"summary": "fix the loop"}
+    )
+
+    task = _task_for(_detail(events=[findings]), "builder", str(tmp_path))
+
+    assert "house style" not in task
+    assert "own guidance" not in task
+
+
+def test_gate_failure_fix_pass_has_no_convention_capture(tmp_path):
+    gate = SimpleNamespace(type="gate_failed", payload={"summary": "tests red"})
+
+    task = _task_for(_detail(events=[gate]), "builder", str(tmp_path))
+
+    assert "own guidance" not in task
+
+
 def test_fix_pass_carries_the_human_note_when_it_is_the_newest_word(tmp_path):
     """A human who requests changes has, by definition, disagreed with a
     reviewer who just passed the work. Prompting from the findings alone tells
