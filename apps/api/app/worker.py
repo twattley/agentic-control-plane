@@ -208,6 +208,31 @@ async def run_pass(pool: asyncpg.Pool, run_id: int, role: str, provider: str) ->
     except (IllegalTransitionError, LeaseConflictError, runs_service.RunNotFoundError):
         return "skipped"
 
+    try:
+        return await _run_claimed_pass(
+            pool, run_id, role, provider, detail, repo, task
+        )
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        try:
+            await runs_service.record_event(
+                pool, run_id,
+                EventIn(
+                    type="worker_failed",
+                    actor=role,
+                    payload={"role": role, "provider": provider, "error": error},
+                ),
+            )
+        except IllegalTransitionError:
+            # The handoff event may have committed before a later operation
+            # raised. In that case the run is already safe and must not be
+            # pulled back from its new owner.
+            pass
+        raise
+
+
+async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) -> str:
+    """Execute a pass after its lease is held; failures are guarded by caller."""
     revision_base = None
     head_before = ""
     if role == "builder":

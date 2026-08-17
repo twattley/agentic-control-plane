@@ -36,6 +36,11 @@ _CLAIM: dict[str, dict[str, str]] = {
 # Event types absent here are informational and never move state.
 _EVENT: dict[str, dict[str, str]] = {
     "builder_brief_posted": {"building": "awaiting_review", "fixing": "awaiting_review"},
+    "worker_failed": {
+        "building": "awaiting_human",
+        "fixing": "awaiting_human",
+        "reviewing": "awaiting_human",
+    },
     # the closer worker reports the gate result:
     "gate_passed": {"closing": "closed"},
     "gate_failed": {"closing": "needs_work"},

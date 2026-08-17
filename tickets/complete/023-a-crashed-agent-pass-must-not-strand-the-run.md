@@ -15,18 +15,13 @@ between claim and event-post kills the worker and freezes the run.
 
 ## Status
 
-- State: ready
-- Phase: shaped
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped from the live run-4 crash. The specific trigger
-  is already gone — the revision-baseline rewrite (7cd5768) diffs against a
-  persisted tree instead of re-applying a patch — but the class is untouched:
-  nothing wraps `run_pass`, so the next unexpected exception strands the next
-  run the same way.
-- Next: builder claims. Sibling of `018`; consider whether one guard can
-  serve both sites.
+- State: complete
+- Phase: done
+- Started: 2026-08-17 10:48:47 BST
+- Updated: 2026-08-17 10:58
+- Completed: 2026-08-17 10:58
+- Last: close-ticket verified reviewer run 6fb9f3e069ddf9e1 and close gate passed
+- Next: closed
 
 ## Why
 
@@ -73,8 +68,8 @@ uv run --project apps/api pytest apps/api/tests/
 
 ## Done When
 
-- [ ] A pass that raises after claiming posts a failure event with the error
+- [x] A pass that raises after claiming posts a failure event with the error
       text, pinned by a test.
-- [ ] The run ends in a human-visible state, not `building`/`fixing`/
+- [x] The run ends in a human-visible state, not `building`/`fixing`/
       `reviewing`, pinned by the same test.
-- [ ] All existing state machine tests pass unmodified.
+- [x] All existing state machine tests pass unmodified.
