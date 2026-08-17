@@ -1,4 +1,4 @@
-# Ticket 031: Truncation must not eat an instruction the fix round needs
+# Ticket 033: Truncation must not eat an instruction the fix round needs
 
 ## Summary
 
@@ -30,10 +30,9 @@ is the two ways a cut can still eat signal:
 - Last: 2026-08-17 - rescoped against current worker.py: findings budget
   (7cd5768) and verdict-refusal carry-through (acp-025) already landed;
   what's left is gate-output direction and marking every cut.
-- Next: builder claims — last in the worker lane (renumbered from 019 to
-  its queue position); after 027 releases `apps/api/app/worker.py`
-  (currently in review); then sequence against 013/018/029, which share the
-  file.
+- Next: builder claims — last in the worker lane; after 027 releases
+  `apps/api/app/worker.py`, sequence behind 029, 031, and 032, which share
+  the file.
 
 ## Why
 
@@ -71,7 +70,7 @@ problem; only the silent-cut part touches them.
   - `apps/api/app/services/state_machine.py`
 - `depends_on`: none
 - `parallelizable`: no — shares `apps/api/app/worker.py` with 027 (active),
-  013, 018, and 029.
+  029, 031, and 032.
 
 ## Validation
 

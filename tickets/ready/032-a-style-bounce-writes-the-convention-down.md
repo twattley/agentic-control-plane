@@ -1,4 +1,4 @@
-# Ticket 013: A style bounce writes the convention down
+# Ticket 032: A style bounce writes the convention down
 
 ## Summary
 
@@ -18,8 +18,9 @@ rule in the repository's own guidance. One correction, then the standard exists
 - Started: —
 - Updated: 2026-08-16
 - Completed: —
-- Last: 2026-08-16 - shaped after the S001 lap, where writing the convention
-  down fixed the code with no instruction attached
+- Last: 2026-08-17 - renumbered from 013 into the sequential queue; dead
+  read-context reference to retired ticket 012 dropped (its reviewer-side
+  half landed as acp-020).
 - Next: builder claims
 
 ## Why
@@ -37,7 +38,7 @@ middle of reviewing is exactly the person least likely to stop and write
 documentation.
 
 This is the capture step in a ladder the rest of which already exists or is
-ticketed: written (repo instructions), reviewed (012), and tested (a repo's own
+ticketed: written (repo instructions), reviewed (landed as acp-020), and tested (a repo's own
 guard tests). All three are worthless if nothing ever gets written down.
 
 ## Capability
@@ -71,12 +72,12 @@ nothing needs writing.
   - `apps/api/tests/features/runs/**`
 - `read_context_paths`:
   - `ARCHITECTURE.md`
-  - `tickets/ready/012-reviewer-judges-house-style-not-just-correctness.md`
 - `forbidden_paths`:
   - `apps/api/app/services/state_machine.py`
 - `depends_on`:
   - none
-- `parallelizable`: yes
+- `parallelizable`: no — shares `apps/api/app/worker.py` with 027 (active),
+  029, 031, and 033.
 
 ## Validation
 

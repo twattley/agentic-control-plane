@@ -1,4 +1,4 @@
-# Ticket 018: A slow gate must not strand a run in closing
+# Ticket 031: A slow gate must not strand a run in closing
 
 ## Summary
 
@@ -16,7 +16,9 @@ long-running gates are now the expected case, not the edge.
 - Updated: 2026-08-17
 - Completed: —
 - Last: 2026-08-17 - shaped from acp-015's review pass (finding: pre-existing,
-  but acp-015 is what makes slow gates likely)
+  but acp-015 is what makes slow gates likely). Renumbered from 018 into the
+  sequential queue; still valid against current worker.py (gate subprocesses
+  run unguarded).
 - Next: builder claims
 
 ## Capability
@@ -40,7 +42,8 @@ subprocess calls already do.
 - `forbidden_paths`:
   - `apps/api/app/services/state_machine.py`
 - `depends_on`: none
-- `parallelizable`: yes
+- `parallelizable`: no — shares `apps/api/app/worker.py` with 027 (active),
+  029, 032, and 033.
 
 ## Validation
 
