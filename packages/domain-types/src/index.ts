@@ -25,6 +25,7 @@ export type ArtifactKind =
   | 'evidence'
   | 'revision_base'
   | 'revision_diff'
+  | 'verification'
 export type Decision = 'approve' | 'request_changes' | 'block' | 'close'
 export type QueueName = 'review' | 'fix' | 'human'
 
@@ -353,4 +354,10 @@ export interface BoardPane {
   repo_name: string
   summary: string | null
   last_event: Event | null
+}
+
+/** A waiting run plus the viewable surfaces its latest build produced. */
+export interface QueueItem {
+  run: Run
+  verify_urls: string[]
 }

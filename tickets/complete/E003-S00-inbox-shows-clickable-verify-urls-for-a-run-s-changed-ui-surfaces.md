@@ -9,13 +9,13 @@
 
 ## Status
 
-- State: ready
-- Phase: queued
-- Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: 2026-08-17 - shaped as the thin first slice of E003 (URL case)
-- Next: builder
+- State: complete
+- Phase: done
+- Started: 2026-08-17 21:13:20 BST
+- Updated: 2026-08-18 04:47
+- Completed: 2026-08-18 04:47
+- Last: close-ticket verified reviewer run efe1f561671d345d and close gate passed
+- Next: closed
 
 ## Story
 
@@ -68,6 +68,8 @@ defect.
 - `allowed_paths`:
   - apps/api/app/worker.py
   - apps/api/app/features/runs/models.py
+  - apps/api/app/features/runs/controller.py
+  - apps/api/app/services/runs_service.py
   - packages/domain-types/**
   - apps/web/src/**
   - apps/api/tests/features/runs/**

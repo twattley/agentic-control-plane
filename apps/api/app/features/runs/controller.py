@@ -13,6 +13,7 @@ from app.features.runs.models import (
     DispatchIn,
     Event,
     EventIn,
+    QueueItem,
     Run,
     RunDetail,
     RunIn,
@@ -72,7 +73,7 @@ async def dispatch_run(run_id: int, data: DispatchIn | None = None) -> dict:
 
 
 @router.get("/queue/{name}")
-async def get_queue(name: QueueName) -> list[Run]:
+async def get_queue(name: QueueName) -> list[QueueItem]:
     return await runs_service.queue(await get_pool(), name.value)
 
 

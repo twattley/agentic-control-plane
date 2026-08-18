@@ -80,6 +80,44 @@ function CloseGate({ event }: { event: Event }) {
   )
 }
 
+// The "how do I see it" pointer the builder emitted, resolved to clickable dev
+// URLs. Empty is meaningful — it says there is nothing to look at, rather than
+// inventing a link.
+function VerifyPanel({ artifacts }: { artifacts: RunDetailData['artifacts'] }) {
+  const latest = [...artifacts].reverse().find((a) => a.kind === 'verification')
+  if (!latest) return null
+  let urls: string[] = []
+  try {
+    urls = (JSON.parse(latest.content) as { urls?: string[] }).urls ?? []
+  } catch {
+    return null
+  }
+  return (
+    <Panel title="Verify">
+      {urls.length === 0 ? (
+        <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-400">
+          No viewable surface for this change.
+        </p>
+      ) : (
+        <ul className="space-y-1 rounded-lg border border-slate-200 bg-white p-3">
+          {urls.map((url) => (
+            <li key={url}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-sm font-medium text-blue-600 underline"
+              >
+                {url}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
 function ActionBar({ data }: { data: RunDetailData }) {
   const id = data.run.id
   const decide = useDecide(id)
@@ -192,7 +230,7 @@ export function RunDetailPage() {
 
   if (isLoading || !data) return <p className="p-4 text-slate-400">loading…</p>
 
-  const { run, events, revisions, pending_revision_request: pendingRequest } = data
+  const { run, events, artifacts, revisions, pending_revision_request: pendingRequest } = data
   const builderCommit = [...events].reverse()
     .find((e) => e.type === 'builder_committed')
   const gate = [...events].reverse()
@@ -215,6 +253,7 @@ export function RunDetailPage() {
 
         {builderCommit && <BuilderCommitWarning event={builderCommit} />}
         {gate && <CloseGate event={gate} />}
+        <VerifyPanel artifacts={artifacts} />
 
         <div className="space-y-6">
           {revisions.map((revision, index) => (

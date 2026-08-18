@@ -21,6 +21,7 @@ from app.features.runs.models import (
     DecisionIn,
     Event,
     EventIn,
+    QueueItem,
     RevisionRequest,
     Run,
     RunDetail,
@@ -309,9 +310,24 @@ _QUEUES = {
 }
 
 
-async def queue(pool: asyncpg.Pool, name: str) -> list[Run]:
+async def queue(pool: asyncpg.Pool, name: str) -> list[QueueItem]:
     async with pool.acquire() as conn:
-        return await repo.runs_in_states(conn, _QUEUES[name])
+        runs = await repo.runs_in_states(conn, _QUEUES[name])
+        return [
+            QueueItem(run=run, verify_urls=_verify_urls(await repo.list_artifacts(conn, run.id)))
+            for run in runs
+        ]
+
+
+def _verify_urls(artifacts: list[Artifact]) -> list[str]:
+    """The urls from a run's latest verification artifact, if any."""
+    for artifact in reversed(artifacts):
+        if artifact.kind == "verification":
+            try:
+                return list(json.loads(artifact.content).get("urls", []))
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                return []
+    return []
 
 
 # Everything still moving — a pane per run in one of these.

@@ -1,4 +1,4 @@
-import type { QueueName, Run } from '@agentic-control-plane/domain-types'
+import type { QueueItem, QueueName } from '@agentic-control-plane/domain-types'
 import { Link } from 'react-router-dom'
 import { useQueue } from '../../api/hooks'
 import { StateBadge } from './StateBadge'
@@ -9,23 +9,46 @@ const SECTIONS: { name: QueueName; title: string; blurb: string }[] = [
   { name: 'fix', title: 'Waiting on a fix', blurb: 'builder to address findings' },
 ]
 
-function RunCard({ run }: { run: Run }) {
+function RunCard({ item }: { item: QueueItem }) {
+  const { run, verify_urls: verifyUrls } = item
   return (
-    <Link
-      to={`/runs/${run.id}`}
-      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 active:bg-slate-50"
-    >
-      <div className="min-w-0">
-        <div className="truncate font-medium text-slate-900">{run.title}</div>
-        <div className="truncate text-sm text-slate-500">{run.ticket_id}</div>
-      </div>
-      <StateBadge state={run.state} />
-    </Link>
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <Link
+        to={`/runs/${run.id}`}
+        className="flex items-center justify-between gap-3 px-4 py-3 active:bg-slate-50"
+      >
+        <div className="min-w-0">
+          <div className="truncate font-medium text-slate-900">{run.title}</div>
+          <div className="truncate text-sm text-slate-500">{run.ticket_id}</div>
+        </div>
+        <StateBadge state={run.state} />
+      </Link>
+      {verifyUrls.length === 0 ? (
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
+          No viewable surface for this change.
+        </p>
+      ) : (
+        <ul className="space-y-1 border-t border-slate-100 px-4 py-2">
+          {verifyUrls.map((url) => (
+            <li key={url}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-xs font-medium text-blue-600 underline"
+              >
+                ↗ {url}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 
 function QueueSection({ name, title, blurb }: { name: QueueName; title: string; blurb: string }) {
-  const { data: runs, isLoading } = useQueue(name)
+  const { data: items, isLoading } = useQueue(name)
   return (
     <section className="space-y-2">
       <div className="flex items-baseline justify-between">
@@ -33,9 +56,9 @@ function QueueSection({ name, title, blurb }: { name: QueueName; title: string; 
         <span className="text-xs text-slate-400">{blurb}</span>
       </div>
       {isLoading && <p className="text-sm text-slate-400">loading…</p>}
-      {!isLoading && !runs?.length && <p className="text-sm text-slate-400">nothing here</p>}
+      {!isLoading && !items?.length && <p className="text-sm text-slate-400">nothing here</p>}
       <div className="space-y-2">
-        {runs?.map((run) => <RunCard key={run.id} run={run} />)}
+        {items?.map((item) => <RunCard key={item.run.id} item={item} />)}
       </div>
     </section>
   )

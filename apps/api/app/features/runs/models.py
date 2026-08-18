@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 # shown to the human. The ordinary `diff` remains the full reviewer input.
 ArtifactKind = Literal[
     "diff", "test_output", "screenshot", "log", "evidence",
-    "revision_base", "revision_diff",
+    "revision_base", "revision_diff", "verification",
 ]
 
 
@@ -67,6 +67,13 @@ class Artifact(BaseModel):
     kind: ArtifactKind
     content: str
     created_at: datetime
+
+
+class QueueItem(BaseModel):
+    """A waiting run plus the viewable surfaces its latest build produced, so the
+    inbox can offer the verify links without a second request per run."""
+    run: Run
+    verify_urls: list[str] = Field(default_factory=list)
 
 
 class DispatchIn(BaseModel):

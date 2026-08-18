@@ -10,6 +10,7 @@ import type {
   DiscussionDetail,
   DiscussionStartInput,
   EventInput,
+  QueueItem,
   QueueName,
   Repo,
   RepoGateInput,
@@ -250,7 +251,7 @@ export function useCreateRun(repoId: number) {
 export function useQueue(name: QueueName) {
   return useQuery({
     queryKey: ['queue', name],
-    queryFn: () => apiFetch<Run[]>(`/queue/${name}`),
+    queryFn: () => apiFetch<QueueItem[]>(`/queue/${name}`),
     refetchInterval: 5_000, // the inbox should feel live
   })
 }

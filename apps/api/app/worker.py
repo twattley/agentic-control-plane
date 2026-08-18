@@ -401,6 +401,13 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
             await runs_service.attach_artifact(
                 pool, run_id, ArtifactIn(kind="evidence", content=evidence)
             )
+        await runs_service.attach_artifact(
+            pool, run_id,
+            ArtifactIn(
+                kind="verification",
+                content=_verification_content(repo.path),
+            ),
+        )
         await runs_service.record_event(
             pool, run_id,
             EventIn(type="builder_brief_posted", actor="builder",
@@ -880,6 +887,103 @@ def _parse_disposition(stdout: str, provider: str) -> str | None:
     if re.search(r"^DISPOSITION:\s*blocked\s*$", message, re.IGNORECASE | re.MULTILINE):
         return "blocked"
     return None
+
+
+def _web_dev_port(repo_path: str) -> int | None:
+    """The Vite dev port for the repo's web app, read from its config."""
+    web = Path(repo_path) / "apps" / "web"
+    for name in ("vite.config.js", "vite.config.ts", "vite.config.mjs"):
+        config = web / name
+        if config.is_file():
+            match = re.search(r"port:\s*(\d+)", config.read_text(encoding="utf-8"))
+            if match:
+                return int(match.group(1))
+    return None
+
+
+def _router_imports(router_text: str) -> dict[str, str]:
+    """Map each imported component name to its src-relative repo file."""
+    files: dict[str, str] = {}
+    for names, default, module in re.findall(
+        r"""import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"](\.[^'"]+)['"]""", router_text
+    ):
+        for name in (names.split(",") if names else [default]):
+            name = name.split(" as ")[-1].strip()
+            if name:
+                files[name] = f"apps/web/src/{module.lstrip('./')}.tsx"
+    return files
+
+
+_ROUTE_TOKEN = re.compile(r"<Route\b(?:[^{}>]|\{[^}]*\})*?/?\s*>|</Route>")
+
+
+def _router_routes_from_text(router_text: str) -> list[tuple[str, str]]:
+    """Parse concrete routes as (full_path, component_file).
+
+    Full paths are composed across nesting; an absolute child path resets the
+    prefix. Parameterised routes (containing ':') are skipped — they have no
+    usable destination without a value.
+    """
+    imports = _router_imports(router_text)
+    routes: list[tuple[str, str]] = []
+    stack: list[str] = []
+    for token in _ROUTE_TOKEN.findall(router_text):
+        if token.startswith("</Route"):
+            if stack:
+                stack.pop()
+            continue
+        path_match = re.search(r"""path=["']([^"']*)["']""", token)
+        element_match = re.search(r"element=\{<\s*(\w+)", token)
+        raw = path_match.group(1) if path_match else ""
+        prefix = "" if raw.startswith("/") else "/".join(stack)
+        parts = [p for p in f"{prefix}/{raw}".split("/") if p]
+        full = "/" + "/".join(parts)
+        component = element_match.group(1) if element_match else None
+        if component and ":" not in full and component in imports:
+            routes.append((full, imports[component]))
+        if not re.search(r"/\s*>$", token):
+            stack.append(raw.lstrip("/"))
+    return routes
+
+
+def _router_routes(repo_path: str) -> list[tuple[str, str]]:
+    router = Path(repo_path) / "apps" / "web" / "src" / "App.tsx"
+    if not router.is_file():
+        return []
+    return _router_routes_from_text(router.read_text(encoding="utf-8"))
+
+
+def _head_router_routes(repo_path: str) -> set[tuple[str, str]]:
+    result = subprocess.run(
+        ["git", "-C", repo_path, "show", "HEAD:apps/web/src/App.tsx"],
+        cwd=repo_path, capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        return set()
+    return set(_router_routes_from_text(result.stdout))
+
+
+def _verification_content(repo_path: str) -> str:
+    """Derive viewable surfaces from the candidate diff and repo config.
+
+    A route is a candidate when its component changed or its router declaration
+    differs from HEAD. The port and path come from repo facts. Reachability is
+    deliberately not frozen into the artifact: the owner may start the target
+    dev server only when they are ready to follow the link.
+    """
+    port = _web_dev_port(repo_path)
+    changed = set(_changed_paths(repo_path))
+    routes_at_head = _head_router_routes(repo_path)
+    urls: list[str] = []
+    if port is not None:
+        for route in _router_routes(repo_path):
+            full_path, component_file = route
+            if component_file not in changed and route in routes_at_head:
+                continue
+            url = f"http://localhost:{port}{full_path}"
+            if url not in urls:
+                urls.append(url)
+    return json.dumps({"kind": "urls", "urls": urls})
 
 
 class _ReviewOutcome(NamedTuple):

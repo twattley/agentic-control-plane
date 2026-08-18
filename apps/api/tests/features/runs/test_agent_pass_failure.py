@@ -65,4 +65,4 @@ async def test_post_claim_failure_returns_the_run_to_the_human(
     assert detail["leases"][-1]["released_at"] is not None
 
     human_queue = (await client.get("/api/v1/queue/human", headers=AUTH)).json()
-    assert [run["id"] for run in human_queue] == [run_id]
+    assert [item["run"]["id"] for item in human_queue] == [run_id]

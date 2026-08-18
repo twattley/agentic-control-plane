@@ -48,7 +48,7 @@ async def _decide(client, run_id: int, decision: str, **extra):
 
 async def _queue(client, name: str) -> list[int]:
     q = (await client.get(f"/api/v1/queue/{name}", headers=AUTH)).json()
-    return [r["id"] for r in q]
+    return [r["run"]["id"] for r in q]
 
 
 async def test_new_run_starts_queued_with_created_event(client):
