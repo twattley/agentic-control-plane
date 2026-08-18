@@ -22,6 +22,7 @@ import signal
 import subprocess
 import sys
 import urllib.request
+from html import escape as html_escape
 from pathlib import Path
 from typing import NamedTuple
 
@@ -104,6 +105,98 @@ def _capture_evidence(repo_path: str, run_id: int) -> str | None:
     content = path.read_text()
     path.unlink()
     return content
+
+
+_MAX_PREVIEW_CHARS = 40_000
+_PREVIEW_ELISION = "<tr><td>… preview truncated: middle rows elided …</td></tr>"
+
+
+def _clear_stale_preview(repo_path: str, run_id: int) -> None:
+    """Remove any same-run preview left over before this pass starts.
+
+    A published preview must come from THIS pass. Clearing the run-named file
+    before the agent runs is what makes that true: a stale file from a crashed
+    earlier pass can no longer be mistaken for freshly captured output. This is
+    the plane's own execution fact — freshness — as opposed to trusting that a
+    file simply exists.
+    """
+    (Path(repo_path) / ARTIFACT_DIR / f"{run_id}.preview.json").unlink(
+        missing_ok=True
+    )
+
+
+def _truncate_preview(html: str) -> tuple[str, bool]:
+    """Truncate oversized preview HTML while it stays renderable.
+
+    A `head()` table is the expected input, so the cut lands on whole `</tr>`
+    boundaries — leading rows, a marked elision row, then trailing rows — never
+    mid-tag. Output the plane cannot recognise as a table is escaped and wrapped
+    so a split tag can never leak as live markup. The result stays within
+    `_MAX_PREVIEW_CHARS`.
+    """
+    if len(html) <= _MAX_PREVIEW_CHARS:
+        return html, False
+    keep = max((_MAX_PREVIEW_CHARS - len(_PREVIEW_ELISION) - 16) // 2, 0)
+    head_cut = html.rfind("</tr>", 0, keep)
+    tail_cut = html.find("<tr", max(len(html) - keep, 0))
+    if head_cut == -1 or tail_cut == -1:
+        safe = html_escape(html)
+        edge = max((_MAX_PREVIEW_CHARS - 80) // 2, 0)
+        body = f"{safe[:edge]}\n… preview truncated …\n{safe[-edge:]}"
+        return f"<pre>{body}</pre>", True
+    head = html[: head_cut + len("</tr>")]
+    tail = html[tail_cut:]
+    return f"{head}{_PREVIEW_ELISION}{tail}", True
+
+
+def _capture_data_preview(repo_path: str, run_id: int) -> dict | None:
+    """Lift the builder's captured data preview out of the checkout.
+
+    The builder writes `<run_id>.preview.json` by RUNNING its code — a
+    structured capture, not a blob: `source` names the exact command that
+    produced the output and `html` is the real `head()` table with its row and
+    null counts. Two things stop file existence from standing in for proof.
+    Freshness: `_clear_stale_preview` removes any same-run file before dispatch,
+    so a published preview provably came from this pass. Provenance: a record
+    missing its `source`/`html` is not a valid capture. Detecting a well-formed
+    but fabricated `source` is beyond a plane that is not the executor — so
+    `source` is handed to the reviewer by `_preview_review_note` to check against
+    the diff, the same tie-to-a-real-run the evidence rail relies on.
+
+    A present-but-defective file (bad JSON, missing fields) returns an `error`
+    record rather than `None`, so a broken capture is surfaced instead of hiding
+    behind the honest "no viewable surface" empty state. Only a missing file is
+    the optional no-preview path. Oversized output is truncated at whole rows and
+    stays renderable.
+    """
+    path = Path(repo_path) / ARTIFACT_DIR / f"{run_id}.preview.json"
+    if not path.is_file():
+        return None  # no file is the optional path: a pass with nothing to preview
+    raw = path.read_text()
+    path.unlink()
+    # A file that IS present but defective must not silently vanish into "no
+    # preview": that hides a broken capture behind an honest empty state. Surface
+    # it as an explicit error the pane shows and the run carries.
+    try:
+        record = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"error": "preview capture was not valid JSON", "source": None}
+    if not isinstance(record, dict):
+        return {"error": "preview capture was not a JSON object", "source": None}
+    source = record.get("source")
+    html = record.get("html")
+    source_ok = isinstance(source, str) and source.strip()
+    html_ok = isinstance(html, str) and html.strip()
+    if not (source_ok and html_ok):
+        missing = [
+            name for name, ok in (("source", source_ok), ("html", html_ok)) if not ok
+        ]
+        return {
+            "error": f"preview capture is missing {', '.join(missing)}",
+            "source": source if source_ok else None,
+        }
+    truncated_html, truncated = _truncate_preview(html)
+    return {"html": truncated_html, "source": source, "truncated": truncated}
 
 
 def _stage_all(repo_path: str) -> None:
@@ -362,6 +455,9 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
     if role == "builder":
         revision_base = await _ensure_revision_base(pool, run_id, detail, repo.path)
         head_before = _git_head(repo.path)
+        # A published preview must come from this pass; drop any stale same-run
+        # file before the agent runs so freshness is the plane's own fact.
+        _clear_stale_preview(repo.path, run_id)
 
     result = subprocess.run(
         _agent_command(role, provider, task, repo.path),
@@ -388,6 +484,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
         # Capture first for a tidy checkout. `_stage_all` separately protects
         # the index from stale or already-staged artifact files.
         evidence = _capture_evidence(repo.path, run_id)
+        preview = _capture_data_preview(repo.path, run_id)
         diff = _git_diff(repo.path)
         revision_diff = _incremental_diff(repo.path, revision_base.content)
         if diff.strip():
@@ -405,7 +502,7 @@ async def _run_claimed_pass(pool, run_id, role, provider, detail, repo, task) ->
             pool, run_id,
             ArtifactIn(
                 kind="verification",
-                content=_verification_content(repo.path),
+                content=_verification_content(repo.path, preview),
             ),
         )
         await runs_service.record_event(
@@ -963,13 +1060,16 @@ def _head_router_routes(repo_path: str) -> set[tuple[str, str]]:
     return set(_router_routes_from_text(result.stdout))
 
 
-def _verification_content(repo_path: str) -> str:
-    """Derive viewable surfaces from the candidate diff and repo config.
+def _verification_content(repo_path: str, preview: dict | None = None) -> str:
+    """The run's viewable surfaces: derived dev URLs plus an optional captured
+    data preview.
 
     A route is a candidate when its component changed or its router declaration
     differs from HEAD. The port and path come from repo facts. Reachability is
     deliberately not frozen into the artifact: the owner may start the target
-    dev server only when they are ready to follow the link.
+    dev server only when they are ready to follow the link. The `data_preview`
+    (when present) is the ACTUAL captured output of a data slice, lifted from
+    the checkout by `_capture_data_preview` before the diff is taken.
     """
     port = _web_dev_port(repo_path)
     changed = set(_changed_paths(repo_path))
@@ -983,7 +1083,7 @@ def _verification_content(repo_path: str) -> str:
             url = f"http://localhost:{port}{full_path}"
             if url not in urls:
                 urls.append(url)
-    return json.dumps({"kind": "urls", "urls": urls})
+    return json.dumps({"urls": urls, "data_preview": preview})
 
 
 class _ReviewOutcome(NamedTuple):
@@ -1099,7 +1199,7 @@ def _task_for(detail, role: str, repo_path: str) -> str:
             "human decision prevents progress, add exactly one standalone "
             "'DISPOSITION: blocked' line immediately before the verdict. Do not use "
             "that disposition for fixable review findings.\n\n"
-            f"DIFF:\n{diff}{_evidence_review_note(detail)}"
+            f"DIFF:\n{diff}{_evidence_review_note(detail)}{_preview_review_note(detail)}"
         )
     status = _status_contract_note(workflow, run.ticket_id)
     instruction = _newest_instruction(detail.events)
@@ -1205,8 +1305,16 @@ def _evidence_invitation(run_id: int) -> str:
         " Optional: if this change has a demonstrable outcome, write markdown to "
         f".agent-artifacts/{run_id}.md — a table of the ticket's scenarios with real "
         "inputs and the ACTUAL outputs you got from running the code, never claims "
-        "about what it would do. Write nothing if there is nothing to demonstrate "
-        "— that is still a complete pass."
+        "about what it would do."
+        " Optional: if this change produces or transforms data, also write a "
+        f"captured data preview to .agent-artifacts/{run_id}.preview.json — a JSON "
+        'object {"source": "<the exact command you ran>", "html": '
+        '"<df.head().to_html() plus row and null counts>"} — where html is the '
+        "ACTUAL output you got by RUNNING that command, never composed. `source` is "
+        "published for the reviewer to check against your diff; a preview with no "
+        "real command behind it is a defect."
+        " Write nothing if there is nothing to demonstrate — that is still a "
+        "complete pass."
     )
 
 
@@ -1223,6 +1331,34 @@ def _evidence_review_note(detail) -> str:
         "Check it against the diff: if the cases could not have been run, or the "
         "outputs contradict the code, that is 'VERDICT: changes'.\n"
         f"{evidence}"
+    )
+
+
+def _preview_review_note(detail) -> str:
+    """Hand the reviewer the data preview's provenance so capture is checked, not
+    trusted. The plane is not an executor, so it cannot itself bind the HTML to a
+    real run — but the reviewer can confirm the named `source` command matches
+    code in the diff. Missing that tie is a changes verdict, the same discipline
+    the evidence rail uses for its case tables."""
+    content = next(
+        (a.content for a in reversed(detail.artifacts) if a.kind == "verification"), ""
+    )
+    try:
+        preview = json.loads(content).get("data_preview") if content else None
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        return ""
+    if not isinstance(preview, dict):
+        return ""
+    source = preview.get("source")
+    if not (isinstance(source, str) and source.strip()):
+        return ""
+    return (
+        "\n\nDATA PREVIEW the builder attached, which it claims to have captured "
+        f"by running:\n  {source}\n"
+        "Confirm that command corresponds to code in the diff — a script or "
+        "pipeline the change actually adds or invokes. If the source cannot be "
+        "tied to the diff, or the table looks composed rather than produced by "
+        "that command, that is 'VERDICT: changes'."
     )
 
 

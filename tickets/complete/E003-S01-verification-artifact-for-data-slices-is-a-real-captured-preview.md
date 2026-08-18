@@ -9,13 +9,13 @@
 
 ## Status
 
-- State: backlog
-- Phase: shape
+- State: complete
+- Phase: done
 - Started: —
-- Updated: 2026-08-17
-- Completed: —
-- Last: portable writer created E003-S01
-- Next: shape scenarios and scope for E003-S01
+- Updated: 2026-08-18 07:37
+- Completed: 2026-08-18 07:37
+- Last: close-ticket verified reviewer run 8a4527a7e7f1ed36 and close gate passed (non-independent review accepted by human)
+- Next: closed
 
 ## Story
 

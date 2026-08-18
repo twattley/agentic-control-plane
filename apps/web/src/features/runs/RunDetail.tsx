@@ -83,22 +83,39 @@ function CloseGate({ event }: { event: Event }) {
 // The "how do I see it" pointer the builder emitted, resolved to clickable dev
 // URLs. Empty is meaningful — it says there is nothing to look at, rather than
 // inventing a link.
+interface DataPreview {
+  html?: string
+  source?: string | null
+  truncated?: boolean
+  // Present when the builder wrote a preview file the worker could not accept
+  // (bad JSON, missing provenance). Surfaced, not silently dropped.
+  error?: string
+}
+
 function VerifyPanel({ artifacts }: { artifacts: RunDetailData['artifacts'] }) {
   const latest = [...artifacts].reverse().find((a) => a.kind === 'verification')
   if (!latest) return null
   let urls: string[] = []
+  let preview: DataPreview | null = null
   try {
-    urls = (JSON.parse(latest.content) as { urls?: string[] }).urls ?? []
+    const content = JSON.parse(latest.content) as {
+      urls?: string[]
+      data_preview?: DataPreview | null
+    }
+    urls = content.urls ?? []
+    preview = content.data_preview ?? null
   } catch {
     return null
   }
+  const empty = urls.length === 0 && !preview
   return (
     <Panel title="Verify">
-      {urls.length === 0 ? (
+      {empty && (
         <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-400">
           No viewable surface for this change.
         </p>
-      ) : (
+      )}
+      {urls.length > 0 && (
         <ul className="space-y-1 rounded-lg border border-slate-200 bg-white p-3">
           {urls.map((url) => (
             <li key={url}>
@@ -113,6 +130,34 @@ function VerifyPanel({ artifacts }: { artifacts: RunDetailData['artifacts'] }) {
             </li>
           ))}
         </ul>
+      )}
+      {preview?.error && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          ⚠ a data preview was captured but could not be shown: {preview.error}
+        </p>
+      )}
+      {preview?.html && (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          {preview.truncated && (
+            <p className="mb-2 text-xs font-medium text-amber-600">
+              ⚠ preview truncated — showing head and tail
+            </p>
+          )}
+          {/* The captured preview is agent-controlled HTML. It renders inside a
+              fully sandboxed iframe (no scripts, no same-origin) so active
+              markup — a <script>, an <img onerror> — cannot run in the
+              control-plane origin or act as the signed-in owner. */}
+          <iframe
+            title="Captured data preview"
+            sandbox=""
+            srcDoc={preview.html}
+            className="h-96 w-full rounded border border-slate-200 bg-white"
+          />
+          <p className="mt-2 text-xs text-slate-400">
+            captured from{' '}
+            <code className="text-slate-500">{preview.source}</code>
+          </p>
+        </div>
       )}
     </Panel>
   )
